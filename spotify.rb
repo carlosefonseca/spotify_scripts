@@ -30,7 +30,7 @@ class Script
     user.playlists.select { |p| playlists_to_modify.include? p.name }.each { |p| p.remove_tracks! recent_tracks }
 
     add_tracks_skip_duplicates(recently_played_playlist, recent_tracks)
-    trim_playlist(recently_played_playlist, 250)
+    # trim_playlist(recently_played_playlist, 250)
 
     plylts = user.playlists.select{|p| playlists_to_modify.include? p.name }.map{|p| [p.name, p.total]}
     plylts += [[recently_played_playlist.name, recently_played_playlist.total]]
