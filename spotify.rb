@@ -29,14 +29,16 @@ class Script
     playlists_to_modify = ["Drive Mix", "Weekly Playlist", "Mix of Daily Mixes"]
     user.playlists.select { |p| playlists_to_modify.include? p.name }.each { |p| p.remove_tracks! recent_tracks }
 
-    add_tracks_skip_duplicates(recently_played_playlist, recent_tracks)
-    # trim_playlist(recently_played_playlist, 250)
+    log_recently_played_tracks
 
     plylts = user.playlists.select{|p| playlists_to_modify.include? p.name }.map{|p| [p.name, p.total]}
     plylts += [[recently_played_playlist.name, recently_played_playlist.total]]
     puts plylts.map{|arr|arr.join(": ")}.join(" | ")
 
-    # binding.pry
+  end
+
+  def pry
+    binding.pry
   end
 
   def print_playlists
@@ -57,8 +59,20 @@ class Script
   end
 
   def log_recently_played_tracks
-    add_tracks_skip_duplicates(recently_played_playlist, recent_tracks)
+    add_tracks_replace_duplicates(recently_played_playlist, recent_tracks)
   end
+
+  def add_tracks_replace_duplicates(playlist, tracks)
+    # fetch the first 50 tracks (most recently played)
+    existing_uris = playlist.tracks.map(&:uri)
+  # find the tracks that where not recently played already
+  new_tracks = tracks.reject { |t| existing_uris.include? t.uri } 
+
+  return if new_tracks.empty?
+    playlist.remove_tracks! new_tracks # remove tracks anywhere in the playlist (played least recently)
+    playlist.add_tracks!(new_tracks, position: 0) # add them 
+  end
+
 
   def add_tracks_skip_duplicates(playlist, tracks) # limited to 100 or maybe less
     existing = load_all_tracks(playlist).map(&:uri)
