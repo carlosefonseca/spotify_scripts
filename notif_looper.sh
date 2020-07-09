@@ -3,7 +3,7 @@
 which terminal-notifier > /dev/null || brew install terminal-notifier
 
 run() {
-	git pull
+	git checkout -f origin/master
 	DATE=$(date +"%Y.%m.%d %H:%M:%S")
 	CURRENT=$($1)
 
