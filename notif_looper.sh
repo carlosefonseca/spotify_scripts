@@ -4,7 +4,7 @@ which terminal-notifier > /dev/null || brew install terminal-notifier
 
 run() {
 	git fetch
-	git checkout -f origin/master
+	git checkout -f origin/master --quiet
 	DATE=$(date +"%Y.%m.%d %H:%M:%S")
 	CURRENT=$($1)
 
