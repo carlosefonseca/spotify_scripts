@@ -9,7 +9,8 @@ class Script
     @env ||= JSON.load(File.read("env"))
   end
 
-  def initialize
+  def initialize(verbose: false)
+    @verbose = verbose
     RSpotify.authenticate(env["client_id"], env["client_secret"])
   end
 
@@ -22,19 +23,43 @@ class Script
   end
 
   def recent_tracks
-    @recents = user.recently_played(limit:50)
+    def fetch_recent_tracks
+      recents = user.recently_played(limit:50)
+      if @verbose
+        puts "Recent Tracks:"
+        p(recents)
+      end
+      recents
+    end
+
+    @recents ||= fetch_recent_tracks
   end  
 
   def run
     playlists_to_modify = ["Drive Mix", "Weekly Playlist", "Mix of Daily Mixes"]
-    user.playlists.select { |p| playlists_to_modify.include? p.name }.each { |p| p.remove_tracks! recent_tracks }
+    user.playlists.select { |p| playlists_to_modify.include? p.name }.each { |p| remove_tracks_by_metadata(recent_tracks, p) }
 
     log_recently_played_tracks
 
     plylts = user.playlists.select{|p| playlists_to_modify.include? p.name }.map{|p| [p.name, p.total]}
     plylts += [[recently_played_playlist.name, recently_played_playlist.total]]
     puts plylts.map{|arr|arr.join(": ")}.join(" | ")
+  end
 
+  def remove_tracks_by_metadata(tracks, playlist)
+    all_tracks = load_all_tracks(playlist)
+    metadata = tracks.flat_map { |t| [t.external_ids, track_name_artist(t)] }
+    matches = all_tracks.select { |t| metadata.include?(t.external_ids) || metadata.include?(track_name_artist(t)) }
+    if @verbose
+      # pp(metadata) 
+      puts "Matched tracks to remove:"
+      p(matches)
+    end
+    playlist.remove_tracks! matches
+  end
+
+  def track_name_artist(track)
+    "#{track.name} - #{track.artists.map{|a|a.name}.join(", ")}"
   end
 
   def pry
@@ -65,10 +90,10 @@ class Script
   def add_tracks_replace_duplicates(playlist, tracks)
     # fetch the first 50 tracks (most recently played)
     existing_uris = playlist.tracks.map(&:uri)
-  # find the tracks that where not recently played already
-  new_tracks = tracks.reject { |t| existing_uris.include? t.uri } 
+    # find the tracks that where not recently played already
+    new_tracks = tracks.reject { |t| existing_uris.include? t.uri } 
 
-  return if new_tracks.empty?
+    return if new_tracks.empty?
     playlist.remove_tracks! new_tracks # remove tracks anywhere in the playlist (played least recently)
     playlist.add_tracks!(new_tracks, position: 0) # add them 
   end
@@ -128,6 +153,6 @@ end
 
 if __FILE__ == $0
 
-  Script.new.run
+  Script.new(verbose:__FILE__ == $0).run
 
 end
