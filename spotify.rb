@@ -153,6 +153,6 @@ end
 
 if __FILE__ == $0
 
-  Script.new(verbose:__FILE__ == $0).run
+  Script.new.run
 
 end
