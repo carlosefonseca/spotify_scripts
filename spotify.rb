@@ -36,7 +36,7 @@ class Script
   end  
 
   def run
-    playlists_to_modify = ["Drive Mix", "Weekly Playlist", "Mix of Daily Mixes"]
+    playlists_to_modify = ["Drive Mix", "Weekly Playlist", "Mix of Daily Mixes", "Home Mix"]
     user.playlists.select { |p| playlists_to_modify.include? p.name }.each { |p| remove_tracks_by_metadata(recent_tracks, p) }
 
     log_recently_played_tracks
