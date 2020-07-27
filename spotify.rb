@@ -1,11 +1,24 @@
 #!/usr/bin/env ruby
 
 # To Do:
-# - Cache / Trim the Recently Played playlist
-# - Create a command line option to play/resume a certain playlist on a certain device (requires new scopes)
+# - Trim the Recently Played playlist
+# - Cache playlists to avoid doing ~20 requests × N playlists every 30 min.
+#   - Store the list of tracks, remove tracks from the cache and the server, compare track count, cache the server's snapshot id
+#   - Next run check if the snapshot id is still the same.
 
 require "rspotify"
 require "pry"
+
+module RSpotify
+  class User
+    def player
+      url = "me/player"
+      response = User.oauth_get(@id, url)
+      return response if RSpotify.raw_response
+      response ? Player.new(self, response) : Player.new(self)
+    end
+  end
+end
 
 class Script
   def env
@@ -66,7 +79,7 @@ class Script
   end
 
   def pry
-    binding.pry
+    binding.pry(quiet: true)
   end
 
   def print_playlists
@@ -150,8 +163,50 @@ class Script
       playlist.remove_tracks! arr
     end
   end
+
+  def play_playlist_on_device(playlist_name, device_name)
+    p = playlist_by_name playlist_name
+    d = user.devices.find { |d| d.name == device_name }
+    user.player.play_context(device_id = d.id, p.uri)
+  end
+
+  def uri_of_currently_playing_context
+    RSpotify.raw_response = true
+    data = JSON.load(user.player.body)
+    RSpotify.raw_response = false
+    data.dig("context", "uri")
+  end
+
+  def play_playlist_on_zipp(uri)
+    run
+
+    RSpotify.raw_response = true
+    data = JSON.load(user.player.body)
+    RSpotify.raw_response = false
+    playing_uri = data&.dig("context", "uri")
+    is_playing = data&.dig("is_playing")
+
+    # playing_uri = uri_of_currently_playing_context
+    if playing_uri == uri
+      unless user.player.playing?
+        user.player.play
+      end
+    else
+      d = user.devices.find { |d| d.name == "ZIPP" }
+      user.player.play_context(device_id = d.id, uri)
+    end
+  end
 end
 
 if __FILE__ == $0
-  Script.new.run
+  case ARGV[0]
+  when "zipp_weekly_playlist"
+    Script.new.play_playlist_on_zipp("spotify:playlist:7oorBA7hnNJngmox1JNrGW")
+  when "zipp_home"
+    Script.new.play_playlist_on_zipp("spotify:playlist:20IsQZexWUDfjim8Xn3g52")
+  when "pry"
+    Script.new.pry
+  else
+    Script.new.run
+  end
 end
