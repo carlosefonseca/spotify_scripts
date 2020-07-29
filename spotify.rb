@@ -177,6 +177,10 @@ class Script
     data.dig("context", "uri")
   end
 
+  def zipp
+    @zipp ||= user.devices.find { |d| d.name == "ZIPP" }
+  end
+
   def play_playlist_on_zipp(uri)
     run
 
@@ -192,14 +196,21 @@ class Script
         user.player.play
       end
     else
-      d = user.devices.find { |d| d.name == "ZIPP" }
-      user.player.play_context(device_id = d.id, uri)
+      user.player.play_context(device_id = zipp.id, uri)
     end
+  end
+
+  def resume_zipp
+    uid = user.id
+    params = { device_ids: [zipp.id], play: true }
+    RSpotify::User.oauth_put(uid, "me/player", params.to_json)
   end
 end
 
 if __FILE__ == $0
   case ARGV[0]
+  when "resume_zipp"
+    Script.new.resume_zipp
   when "zipp_weekly_playlist"
     Script.new.play_playlist_on_zipp("spotify:playlist:7oorBA7hnNJngmox1JNrGW")
   when "zipp_home"
