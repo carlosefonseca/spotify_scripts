@@ -87,7 +87,7 @@ class Script
   end
 
   def playlist_by_name(name)
-    user.playlists.find { |p| p.name == "Recently Played" }
+    user.playlists.find { |p| p.name == name }
   end
 
   def recently_played_playlist
