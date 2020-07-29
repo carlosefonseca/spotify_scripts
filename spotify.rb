@@ -1,7 +1,6 @@
 #!/usr/bin/env ruby
 
 # To Do:
-# - Trim the Recently Played playlist
 # - Cache playlists to avoid doing ~20 requests × N playlists every 30 min.
 #   - Store the list of tracks, remove tracks from the cache and the server, compare track count, cache the server's snapshot id
 #   - Next run check if the snapshot id is still the same.
@@ -102,8 +101,16 @@ class Script
 
   def log_recently_played_tracks
     add_tracks_replace_duplicates(recently_played_playlist, recent_tracks)
-    (1000..recently_played_playlist.total - 1).each_slice(100).each do |trks|
-      recently_played_playlist.remove_tracks!(trks, snapshot_id: recently_played_playlist.snapshot_id)
+    trim_playlist
+  end
+
+  def trim_playlist(playlist)
+    while playlist.total > 1000
+      top_limit = [1099, playlist.total - 1].min
+      trks = (1000..top_limit).to_a
+      puts "Snapshot: #{playlist.snapshot_id}; Total: #{playlist.total}; #{(1000..top_limit)}; L: #{trks.length}"
+      playlist.remove_tracks!(trks, snapshot_id: playlist.snapshot_id)
+      playlist.complete!
     end
   end
 
@@ -140,11 +147,6 @@ class Script
       return tracks if new_tracks.empty?
     end
     tracks
-  end
-
-  def trim_playlist(playlist, limit)
-    tracks_to_remove = (limit..playlist.total).map { |i| i }
-    playlist.remove_tracks!(tracks_to_remove) unless tracks_to_remove.empty?
   end
 
   def dedup(playlist)
