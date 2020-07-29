@@ -102,6 +102,9 @@ class Script
 
   def log_recently_played_tracks
     add_tracks_replace_duplicates(recently_played_playlist, recent_tracks)
+    (1000..recently_played_playlist.total - 1).each_slice(100).each do |trks|
+      recently_played_playlist.remove_tracks!(trks, snapshot_id: recently_played_playlist.snapshot_id)
+    end
   end
 
   def add_tracks_replace_duplicates(playlist, tracks)
