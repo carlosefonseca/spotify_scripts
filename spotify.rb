@@ -105,6 +105,7 @@ class Script
   end
 
   def trim_playlist(playlist)
+    playlist.complete!
     while playlist.total > 1000
       top_limit = [1099, playlist.total - 1].min
       trks = (1000..top_limit).to_a
