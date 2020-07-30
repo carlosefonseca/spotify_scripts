@@ -152,7 +152,7 @@ class Script
   def dedup(playlist)
     tracks = load_all_tracks(playlist)
 
-    ideal_tracks = tracks.each_with_index.uniq { |t, i| t.uri }.map { |t, i| i }
+    ideal_tracks = tracks.each_with_index.uniq { |t, i| track_name_artist(t) }.map { |t, i| i }
 
     to_remove = tracks.each_with_index.reject { |t, i| ideal_tracks.include? i }.map { |t, i| { track: t, positions: [i] } }
 
@@ -160,7 +160,7 @@ class Script
   end
 
   def action_each(tracks)
-    tracks.each_slice(100).map { |arr| yield arr }
+    tracks.each_slice(100).reverse.map { |arr| yield arr }
   end
 
   def remove(playlist, to_remove)
