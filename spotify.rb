@@ -101,7 +101,7 @@ class Script
 
   def log_recently_played_tracks
     add_tracks_replace_duplicates(recently_played_playlist, recent_tracks)
-    trim_playlist
+    trim_playlist(recently_played_playlist)
   end
 
   def trim_playlist(playlist)
