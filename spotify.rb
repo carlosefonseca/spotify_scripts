@@ -74,7 +74,7 @@ class Script
   end
 
   def track_name_artist(track)
-    "#{track.name} - #{track.artists.map { |a| a.name }.join(", ")}"
+    "#{track.name.split(" - ").first} - #{track.artists.map { |a| a.name }.join(", ")}"
   end
 
   def pry
@@ -109,7 +109,7 @@ class Script
     while playlist.total > 1000
       top_limit = [1099, playlist.total - 1].min
       trks = (1000..top_limit).to_a
-      puts "Snapshot: #{playlist.snapshot_id}; Total: #{playlist.total}; #{(1000..top_limit)}; L: #{trks.length}"
+      puts "Snapshot: #{playlist.snapshot_id}; Total: #{playlist.total}; #{(1000..top_limit)}; L: #{trks.length}" if @verbose
       playlist.remove_tracks!(trks, snapshot_id: playlist.snapshot_id)
       playlist.complete!
     end
