@@ -63,8 +63,18 @@ class Script
 
   def remove_tracks_by_metadata(tracks, playlist)
     all_tracks = load_all_tracks(playlist)
-    metadata = tracks.flat_map { |t| [t.external_ids, track_name_artist(t)] }
-    matches = all_tracks.select { |t| metadata.include?(t.external_ids) || metadata.include?(track_name_artist(t)) }
+
+    external_ids = Set[]
+    names = Set[]
+    ids = Set[]
+
+    tracks.each do |t|
+      external_ids.add(t.external_ids) if t.external_ids
+      names.add(track_name_artist(t))
+      ids.merge([t.id, t.linked_from&.id].compact)
+    end
+
+    matches = all_tracks.select { |t| ids.include? (t.id) || ids.include?(t.linked_from&.id) || external_ids.include?(t.external_ids) || names.include?(track_name_artist(t)) }
     if @verbose
       # pp(metadata)
       puts "Matched tracks to remove:"
@@ -78,6 +88,7 @@ class Script
   end
 
   def pry
+    @verbose = true
     binding.pry(quiet: true)
   end
 
@@ -117,8 +128,8 @@ class Script
 
   def add_tracks_replace_duplicates(playlist, tracks)
     # fetch the first 50 tracks (most recently played)
-    existing_uris = playlist.tracks.map(&:uri)
-    # find the tracks that where not recently played already
+    existing_uris = playlist.tracks(market: "from_token").map(&:uri)
+    # find the tracks that were not recently played already
     new_tracks = tracks.reject { |t| existing_uris.include? t.uri }
 
     return if new_tracks.empty?
@@ -143,7 +154,7 @@ class Script
   def load_all_tracks(playlist)
     tracks = []
     while true
-      new_tracks = playlist.tracks(offset: tracks.length)
+      new_tracks = playlist.tracks(offset: tracks.length, market: "from_token")
       tracks += new_tracks
       return tracks if new_tracks.empty?
     end
@@ -161,7 +172,7 @@ class Script
   end
 
   def action_each(tracks)
-    tracks.each_slice(100).reverse.map { |arr| yield arr }
+    tracks.each_slice(100).to_a.reverse.map { |arr| yield arr }
   end
 
   def remove(playlist, to_remove)
@@ -185,6 +196,10 @@ class Script
 
   def zipp
     @zipp ||= user.devices.find { |d| d.name == "ZIPP" }
+  end
+
+  def play_playlist_on_zipp_named(name)
+    play_playlist_on_zipp(playlist_by_name(name).uri)
   end
 
   def play_playlist_on_zipp(uri)
@@ -221,6 +236,8 @@ if __FILE__ == $0
     Script.new.play_playlist_on_zipp("spotify:playlist:7oorBA7hnNJngmox1JNrGW")
   when "zipp_home"
     Script.new.play_playlist_on_zipp("spotify:playlist:20IsQZexWUDfjim8Xn3g52")
+  when "zipp_playlist"
+    Script.new.play_playlist_on_zipp_named("Drive Mix")
   when "pry"
     Script.new.pry
   else
