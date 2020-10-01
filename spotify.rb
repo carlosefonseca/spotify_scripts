@@ -62,7 +62,7 @@ class Script
   end
 
   def remove_tracks_by_metadata(tracks, playlist)
-    all_tracks = load_all_tracks(playlist)
+    all_tracks = load_all_tracks(playlist, market: nil)
 
     external_ids = Set[]
     names = Set[]
@@ -74,13 +74,13 @@ class Script
       ids.merge([t.id, t.linked_from&.id].compact)
     end
 
-    matches = all_tracks.select { |t| ids.include? (t.id) || ids.include?(t.linked_from&.id) || external_ids.include?(t.external_ids) || names.include?(track_name_artist(t)) }
+    matches = all_tracks.select { |t| ids.include?(t.id) || ids.include?(t.linked_from&.id) || external_ids.include?(t.external_ids) || names.include?(track_name_artist(t)) }
     if @verbose
       # pp(metadata)
       puts "Matched tracks to remove:"
       p(matches)
     end
-    playlist.remove_tracks! matches
+    remove(playlist, matches)
   end
 
   def track_name_artist(track)
@@ -151,10 +151,10 @@ class Script
     print_tracks(tracks)
   end
 
-  def load_all_tracks(playlist)
+  def load_all_tracks(playlist, market: "from_token")
     tracks = []
     while true
-      new_tracks = playlist.tracks(offset: tracks.length, market: "from_token")
+      new_tracks = playlist.tracks(offset: tracks.length, market: market)
       tracks += new_tracks
       return tracks if new_tracks.empty?
     end
