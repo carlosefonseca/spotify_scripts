@@ -19,6 +19,14 @@ module RSpotify
   end
 end
 
+module RSpotify
+  class Track
+    def linked_from1
+      instance_variable_get("@linked_from")
+    end
+  end
+end
+
 class Script
   def env
     @env ||= JSON.load(File.read("env"))
@@ -65,14 +73,12 @@ class Script
     puts plylts.map { |arr| arr.join(": ") }.join(" | ")
   end
 
-  def find_duplicated_tracks_in_playlist(tracks, playlist)
-    all_tracks = load_all_tracks(playlist)
+  def intersect_track_sets_by_metadata(tracks1, tracks2)
+    ids = tracks1.flat_map { |t| [t.id, t.instance_variable_get("@linked_from")&.id].compact }
+    external_ids = collect_values(tracks1.map { |t| t.external_ids })
+    artistTitles = collect_values(tracks1.map { |t| { t.artists.first.id => t.name.split(" - ").first } })
 
-    ids = tracks.flat_map { |t| [t.id, t.instance_variable_get("@linked_from")&.id].compact }
-    external_ids = collect_values(tracks.map { |t| t.external_ids })
-    artistTitles = collect_values(tracks.map { |t| { t.artists.first.id => t.name.split(" - ").first } })
-
-    all_tracks.select do |t|
+    tracks2.select do |t|
       ids.include?(t.id) ||
       ids.include?(t.instance_variable_get("@linked_from")&.id) ||
       external_ids.include?(t.external_ids) ||
@@ -81,7 +87,8 @@ class Script
   end
 
   def remove_tracks_by_metadata(tracks, playlist)
-    matches = find_duplicated_tracks_in_playlist(tracks, playlist)
+    all_tracks = load_all_tracks(playlist, market: "from_token")
+    matches = intersect_track_sets_by_metadata(tracks, all_tracks)
     if @verbose
       # pp(metadata)
       puts "Matched tracks to remove:"
@@ -152,10 +159,16 @@ class Script
 
   def print_tracks(tracks)
     puts tracks.map { |t| [t.uri, t.name, t.artists.map { |a| a.name }].join(" - ") }
+    tracks
   end
 
   def p(tracks)
     print_tracks(tracks)
+  end
+
+  def p2(tracks)
+    puts tracks.map { |t| [t.uri, t.name, t.artists.map { |a| a.name }, t.external_ids, t.linked_from1&.id].compact.join(" - ") }
+    tracks
   end
 
   def load_all_tracks(playlist, market: "from_token")
@@ -180,6 +193,13 @@ class Script
 
   def action_each(tracks)
     tracks.each_slice(100).to_a.reverse.map { |arr| yield arr }
+  end
+
+  def remove_by_position(playlist, to_remove)
+    action_each(to_remove) do |arr|
+      positions = playlist.each_with_index.select { |e, i| arr.include? e }.map { |e, i| i }
+      playlist.remove_tracks!(positions, snapshot_id: playlist.snapshot_id)
+    end
   end
 
   def remove(playlist, to_remove)
