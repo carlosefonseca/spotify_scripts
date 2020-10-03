@@ -50,6 +50,10 @@ class Script
     @recents ||= fetch_recent_tracks
   end
 
+  def all_recently_played
+    @all_recents ||= load_all_tracks(playlist_by_name("Recently Played"), market: nil)
+  end
+
   def run
     playlists_to_modify = ["Drive Mix", "Weekly Playlist", "Mix of Daily Mixes", "Home Mix"]
     user.playlists.select { |p| playlists_to_modify.include? p.name }.each { |p| remove_tracks_by_metadata(recent_tracks, p) }
@@ -61,20 +65,23 @@ class Script
     puts plylts.map { |arr| arr.join(": ") }.join(" | ")
   end
 
-  def remove_tracks_by_metadata(tracks, playlist)
-    all_tracks = load_all_tracks(playlist, market: nil)
+  def find_duplicated_tracks_in_playlist(tracks, playlist)
+    all_tracks = load_all_tracks(playlist)
 
-    external_ids = Set[]
-    names = Set[]
-    ids = Set[]
+    ids = tracks.flat_map { |t| [t.id, t.instance_variable_get("@linked_from")&.id].compact }
+    external_ids = collect_values(tracks.map { |t| t.external_ids })
+    artistTitles = collect_values(tracks.map { |t| { t.artists.first.id => t.name.split(" - ").first } })
 
-    tracks.each do |t|
-      external_ids.add(t.external_ids) if t.external_ids
-      names.add(track_name_artist(t))
-      ids.merge([t.id, t.linked_from&.id].compact)
+    all_tracks.select do |t|
+      ids.include?(t.id) ||
+      ids.include?(t.instance_variable_get("@linked_from")&.id) ||
+      external_ids.include?(t.external_ids) ||
+      (artistTitles[t.artists.first.id] || []).include?(t.name.split(" - ").first)
     end
+  end
 
-    matches = all_tracks.select { |t| ids.include?(t.id) || ids.include?(t.linked_from&.id) || external_ids.include?(t.external_ids) || names.include?(track_name_artist(t)) }
+  def remove_tracks_by_metadata(tracks, playlist)
+    matches = find_duplicated_tracks_in_playlist(tracks, playlist)
     if @verbose
       # pp(metadata)
       puts "Matched tracks to remove:"
@@ -226,6 +233,10 @@ class Script
     params = { device_ids: [zipp.id], play: true }
     RSpotify::User.oauth_put(uid, "me/player", params.to_json)
   end
+end
+
+def collect_values(hashes)
+  {}.tap { |r| hashes.each { |h| h.each { |k, v| (r[k] ||= Set[]) << v } } }
 end
 
 if __FILE__ == $0
