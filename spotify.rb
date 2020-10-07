@@ -62,9 +62,13 @@ class Script
     @all_recents ||= load_all_tracks(playlist_by_name("Recently Played"), market: nil)
   end
 
-  def run
+  def clean
+    run(tracks_to_remove: all_recently_played + recent_tracks)
+  end
+
+  def run(tracks_to_remove: recent_tracks)
     playlists_to_modify = ["Drive Mix", "Weekly Playlist", "Mix of Daily Mixes", "Home Mix"]
-    user.playlists.select { |p| playlists_to_modify.include? p.name }.each { |p| remove_tracks_by_metadata(recent_tracks, p) }
+    user.playlists.select { |p| playlists_to_modify.include? p.name }.each { |p| remove_tracks_by_metadata(tracks_to_remove, p) }
 
     log_recently_played_tracks
 
@@ -91,10 +95,10 @@ class Script
     matches = intersect_track_sets_by_metadata(tracks, all_tracks)
     if @verbose
       # pp(metadata)
-      puts "Matched tracks to remove:"
+      puts "Matched tracks to remove from #{playlist.name}:"
       p(matches)
     end
-    remove(playlist, matches)
+    remove_by_position(playlist, matches, all_tracks)
   end
 
   def track_name_artist(track)
@@ -195,9 +199,10 @@ class Script
     tracks.each_slice(100).to_a.reverse.map { |arr| yield arr }
   end
 
-  def remove_by_position(playlist, to_remove)
+  def remove_by_position(playlist, to_remove, playlist_tracks = nil)
+    playlist_tracks ||= load_all_tracks(playlist)
     action_each(to_remove) do |arr|
-      positions = playlist.each_with_index.select { |e, i| arr.include? e }.map { |e, i| i }
+      positions = playlist_tracks.each_with_index.select { |e, i| arr.include? e }.map { |e, i| i }
       playlist.remove_tracks!(positions, snapshot_id: playlist.snapshot_id)
     end
   end
@@ -269,6 +274,8 @@ if __FILE__ == $0
     Script.new.play_playlist_on_zipp("spotify:playlist:20IsQZexWUDfjim8Xn3g52")
   when "zipp_playlist"
     Script.new.play_playlist_on_zipp_named("Drive Mix")
+  when "clean"
+    Script.new.clean
   when "pry"
     Script.new.pry
   else
