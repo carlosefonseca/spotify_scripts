@@ -82,18 +82,20 @@ class Script
     external_ids = collect_values(tracks1.map { |t| t.external_ids })
     artistTitles = collect_values(tracks1.map { |t| { t.artists.first.id => t.name.split(" - ").first } })
 
+    artistsToNotFilterByTrackName = ["25mFVpuABa9GkGcj9eOPce"]
+
     tracks2.select do |t|
       ids.include?(t.id) ||
       ids.include?(t.instance_variable_get("@linked_from")&.id) ||
       external_ids.include?(t.external_ids) ||
-      (artistTitles[t.artists.first.id] || []).include?(t.name.split(" - ").first)
+      ((artistsToNotFilterByTrackName & t.artists.map { |a| a.id }).empty?) && ((artistTitles[t.artists.first.id] || []).include?(t.name.split(" - ").first))
     end
   end
 
   def remove_tracks_by_metadata(tracks, playlist)
     all_tracks = load_all_tracks(playlist, market: "from_token")
     matches = intersect_track_sets_by_metadata(tracks, all_tracks)
-    if @verbose
+    if @verbose || true
       # pp(metadata)
       puts "Matched tracks to remove from #{playlist.name}:"
       p(matches)
