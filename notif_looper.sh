@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-which terminal-notifier > /dev/null || brew install terminal-notifier
-
 run() {
 	git fetch
 	git checkout -f origin/main --quiet
@@ -17,21 +15,12 @@ run() {
 	LAST=$(cat last.log)
 
 	if [[ $CURRENT = $LAST ]]; then
-		echo "$DATE: $CURRENT -> EQUAL"
+		echo "= $DATE: $CURRENT"
 	else
-		echo "$DATE: $CURRENT -> DIFF"
-
-		# if [ -x "$(command -v alerter)" ]; then
-		# 	alerter -sound default -title "Notif Looper" -subtitle 'New Data!' -message "$CURRENT" -ignoreDnD
-		# 	echo
-		# else
-			terminal-notifier -sound default -title "Notif Looper" -subtitle 'New Data!' -message $CURRENT -ignoreDnD
-		# fi
+		echo "! $DATE: $CURRENT"
 
 		echo $CURRENT > last.log
-
 	fi
-
 }
 
 let secs=$2*60
