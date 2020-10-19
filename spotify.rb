@@ -88,7 +88,7 @@ class Script
       ids.include?(t.id) ||
       ids.include?(t.instance_variable_get("@linked_from")&.id) ||
       external_ids.include?(t.external_ids) ||
-      ((artistsToNotFilterByTrackName & t.artists.map { |a| a.id }).empty?) && ((artistTitles[t.artists.first.id] || []).include?(t.name.split(" - ").first))
+      ((artistsToNotFilterByTrackName & t.album.artists.map { |a| a.id }).empty?) && ((artistTitles[t.artists.first.id] || []).include?(t.name.split(" - ").first))
     end
   end
 
