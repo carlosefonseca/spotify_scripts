@@ -7,6 +7,7 @@
 
 require "rspotify"
 require "pry"
+require 'colored'
 
 module RSpotify
   class User
@@ -74,7 +75,8 @@ class Script
 
     plylts = user.playlists.select { |p| playlists_to_modify.include? p.name }.map { |p| [p.name, p.total] }
     plylts += [[recently_played_playlist.name, recently_played_playlist.total]]
-    puts plylts.map { |arr| arr.join(": ") }.join(" | ")
+    txt = plylts.map { |arr| arr.join(": ") }.join(" | ")
+    puts txt.green
   end
 
   def intersect_track_sets_by_metadata(tracks1, tracks2)
@@ -97,7 +99,7 @@ class Script
     matches = intersect_track_sets_by_metadata(tracks, all_tracks)
     if @verbose || true
       # pp(metadata)
-      puts "Matched tracks to remove from #{playlist.name}:"
+      puts "Matched tracks to remove from #{playlist.name}:".yellow.bold
       p(matches)
     end
     remove_by_position(playlist, matches, all_tracks)
