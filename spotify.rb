@@ -76,7 +76,7 @@ class Script
     plylts = user.playlists.select { |p| playlists_to_modify.include? p.name }.map { |p| [p.name, p.total] }
     plylts += [[recently_played_playlist.name, recently_played_playlist.total]]
     txt = plylts.map { |arr| arr.join(": ") }.join(" | ")
-    puts txt.green
+    puts txt.green.bold
   end
 
   def intersect_track_sets_by_metadata(tracks1, tracks2)
@@ -97,9 +97,8 @@ class Script
   def remove_tracks_by_metadata(tracks, playlist)
     all_tracks = load_all_tracks(playlist, market: "from_token")
     matches = intersect_track_sets_by_metadata(tracks, all_tracks)
-    if @verbose || true
-      # pp(metadata)
-      puts "Matched tracks to remove from #{playlist.name}:".yellow.bold
+    if @verbose && !matches.empty?
+      puts "Matched tracks to remove from #{playlist.name}:".yellow
       p(matches)
     end
     remove_by_position(playlist, matches, all_tracks)
@@ -166,7 +165,7 @@ class Script
   end
 
   def print_tracks(tracks)
-    puts tracks.map { |t| [t.uri, t.name, t.artists.map { |a| a.name }].join(" - ") }
+    puts tracks.map { |t| [t.id, t.name.blue, t.artists.map { |a| a.name }.join(", ").cyan].join(" - ") }
     tracks
   end
 
