@@ -8,7 +8,7 @@ update() {
 
 run() {
 	DATE=$(date +"%Y.%m.%d %H:%M:%S")
-	CURRENT=$($1)
+	CURRENT=$($@)
 
 	if [ ! -f last.log ]; then
 		echo "$CURRENT -> NEW"
