@@ -3,6 +3,7 @@
 run() {
 	git fetch
 	git checkout -f origin/main --quiet
+	bundle install --quiet
 	DATE=$(date +"%Y.%m.%d %H:%M:%S")
 	CURRENT=$($1)
 
