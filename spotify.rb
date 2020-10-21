@@ -97,7 +97,7 @@ class Script
   def remove_tracks_by_metadata(tracks, playlist)
     all_tracks = load_all_tracks(playlist, market: "from_token")
     matches = intersect_track_sets_by_metadata(tracks, all_tracks)
-    if @verbose && !matches.empty?
+    if !matches.empty?
       puts "Matched tracks to remove from #{playlist.name}:".yellow
       p(matches)
     end
