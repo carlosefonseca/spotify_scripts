@@ -8,4 +8,5 @@ gem "rspotify", "~> 2.9"
 
 gem "pry", "~> 0.13.1"
 
-gem "colored", "~> 1.2"
+
+gem "pastel", "~> 0.8.0"

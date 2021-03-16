@@ -5,14 +5,14 @@
 #   - Store the list of tracks, remove tracks from the cache and the server, compare track count, cache the server's snapshot id
 #   - Next run check if the snapshot id is still the same.
 
-require "rspotify"
-require "pry"
-require 'colored'
+require 'rspotify'
+require 'pry'
+require 'pastel'
 
 module RSpotify
   class User
     def player
-      url = "me/player"
+      url = 'me/player'
       response = User.oauth_get(@id, url)
       return response if RSpotify.raw_response
       response ? Player.new(self, response) : Player.new(self)
@@ -23,19 +23,25 @@ end
 module RSpotify
   class Track
     def linked_from1
-      instance_variable_get("@linked_from")
+      instance_variable_get('@linked_from')
     end
   end
 end
 
+
 class Script
+
+  def pastel
+    pastel ||= Pastel.new
+  end
+
   def env
-    @env ||= JSON.load(File.read("env"))
+    @env ||= JSON.load(File.read('env'))
   end
 
   def initialize(verbose: false)
     @verbose = verbose
-    RSpotify.authenticate(env["client_id"], env["client_secret"])
+    RSpotify.authenticate(env['client_id'], env['client_secret'])
   end
 
   def user
@@ -43,14 +49,18 @@ class Script
   end
 
   def options
-    @options = JSON.parse(File.read("token.json"))
+    @options = JSON.parse(File.read('token.json'))
+  end
+
+  def player
+    @player ||= user.player
   end
 
   def recent_tracks
     def fetch_recent_tracks
       recents = user.recently_played(limit: 50)
       if @verbose
-        puts "Recent Tracks:"
+        puts 'Recent Tracks:'
         p(recents)
       end
       recents
@@ -60,7 +70,7 @@ class Script
   end
 
   def all_recently_played
-    @all_recents ||= load_all_tracks(playlist_by_name("Recently Played"), market: nil)
+    @all_recents ||= load_all_tracks(playlist_by_name('Recently Played'), market: nil)
   end
 
   def clean
@@ -68,44 +78,44 @@ class Script
   end
 
   def run(tracks_to_remove: recent_tracks)
-    playlists_to_modify = ["Drive Mix", "Weekly Playlist", "Mix of Daily Mixes", "Home Mix"]
+    playlists_to_modify = ['Drive Mix', 'Weekly Playlist', 'Mix of Daily Mixes', 'Home Mix']
     user.playlists.select { |p| playlists_to_modify.include? p.name }.each { |p| remove_tracks_by_metadata(tracks_to_remove, p) }
 
     log_recently_played_tracks
 
     plylts = user.playlists.select { |p| playlists_to_modify.include? p.name }.map { |p| [p.name, p.total] }
     plylts += [[recently_played_playlist.name, recently_played_playlist.total]]
-    txt = plylts.map { |arr| arr.join(": ") }.join(" | ")
-    puts txt.green.bold
+    txt = plylts.map { |arr| arr.join(': ') }.join(' | ')
+    puts pastel.green.bold(txt)
   end
 
   def intersect_track_sets_by_metadata(tracks1, tracks2)
-    ids = tracks1.flat_map { |t| [t.id, t.instance_variable_get("@linked_from")&.id].compact }
+    ids = tracks1.flat_map { |t| [t.id, t.instance_variable_get('@linked_from')&.id].compact }
     external_ids = collect_values(tracks1.map { |t| t.external_ids })
-    artistTitles = collect_values(tracks1.map { |t| { t.artists.first.id => t.name.split(" - ").first } })
+    artistTitles = collect_values(tracks1.map { |t| { t.artists.first.id => t.name.split(' - ').first } })
 
-    artistsToNotFilterByTrackName = ["25mFVpuABa9GkGcj9eOPce"]
+    artistsToNotFilterByTrackName = ['25mFVpuABa9GkGcj9eOPce']
 
     tracks2.select do |t|
       ids.include?(t.id) ||
-      ids.include?(t.instance_variable_get("@linked_from")&.id) ||
+      ids.include?(t.instance_variable_get('@linked_from')&.id) ||
       external_ids.include?(t.external_ids) ||
-      ((artistsToNotFilterByTrackName & t.album.artists.map { |a| a.id }).empty?) && ((artistTitles[t.artists.first.id] || []).include?(t.name.split(" - ").first))
+      ((artistsToNotFilterByTrackName & t.album.artists.map { |a| a.id }).empty?) && ((artistTitles[t.artists.first.id] || []).include?(t.name.split(' - ').first))
     end
   end
 
   def remove_tracks_by_metadata(tracks, playlist)
-    all_tracks = load_all_tracks(playlist, market: "from_token")
+    all_tracks = load_all_tracks(playlist, market: 'from_token')
     matches = intersect_track_sets_by_metadata(tracks, all_tracks)
     if !matches.empty?
-      puts "Matched tracks to remove from #{playlist.name}:".yellow
+      puts pastel.yellow("Matched tracks to remove from #{playlist.name}:")
       p(matches)
     end
     remove_by_position(playlist, matches, all_tracks)
   end
 
   def track_name_artist(track)
-    "#{track.name.split(" - ").first} - #{track.artists.map { |a| a.name }.join(", ")}"
+    "#{track.name.split(' - ').first} - #{track.artists.map { |a| a.name }.join(', ')}"
   end
 
   def pry
@@ -114,17 +124,17 @@ class Script
   end
 
   def print_playlists
-    puts user.playlists.map { |p| [p.uri, p.name].join(" ") }
+    puts user.playlists.map { |p| [p.uri, p.name].join(' ') }
   end
 
   def playlist_by_name(name)
-    user.playlists.find { |p| p.name == name }
+    load_all_playlists.find { |p| p.name == name }
   end
 
   def recently_played_playlist
     def fetch_recently_played_playlist
-      p = user.playlists.find { |p| p.name == "Recently Played" }
-      p = user.create_playlist!("Recently Played") unless p
+      p = user.playlists.find { |p| p.name == 'Recently Played' }
+      p = user.create_playlist!('Recently Played') unless p
       return p
     end
 
@@ -149,7 +159,7 @@ class Script
 
   def add_tracks_replace_duplicates(playlist, tracks)
     # fetch the first 50 tracks (most recently played)
-    existing_uris = playlist.tracks(market: "from_token").map(&:uri)
+    existing_uris = playlist.tracks(market: 'from_token').map(&:uri)
     # find the tracks that were not recently played already
     new_tracks = tracks.reject { |t| existing_uris.include? t.uri }
 
@@ -165,7 +175,7 @@ class Script
   end
 
   def print_tracks(tracks)
-    puts tracks.map { |t| [t.id, t.name.blue, t.artists.map { |a| a.name }.join(", ").cyan].join(" - ") }
+    puts tracks.map { |t| [t.id, pastel.blue(t.name), pastel.cyan(t.artists.map { |a| a.name }.join(', '))].join(' - ') }
     tracks
   end
 
@@ -174,14 +184,37 @@ class Script
   end
 
   def p2(tracks)
-    puts tracks.map { |t| [t.uri, t.name, t.artists.map { |a| a.name }, t.external_ids, t.linked_from1&.id].compact.join(" - ") }
+    puts tracks.map { |t| [t.uri, t.name, t.artists.map { |a| a.name }, t.external_ids, t.linked_from1&.id].compact.join(' - ') }
     tracks
   end
 
-  def load_all_tracks(playlist, market: "from_token")
+  def load_all_tracks(playlist, market: 'from_token')
     tracks = []
     while true
       new_tracks = playlist.tracks(offset: tracks.length, market: market)
+      tracks += new_tracks
+      return tracks if new_tracks.empty?
+    end
+    tracks
+  end
+
+  def load_all_playlists
+    def _load
+      playlists = []
+      while true
+        new_playlists = user.playlists(limit: 50, offset: playlists.length)
+        playlists += new_playlists
+        return playlists if new_playlists.empty?
+      end
+    end
+
+    @playlists ||= _load
+  end
+
+  def load_saved_tracks(market: 'from_token')
+    tracks = []
+    while true
+      new_tracks = user.saved_tracks(offset: tracks.length, market: market)
       tracks += new_tracks
       return tracks if new_tracks.empty?
     end
@@ -193,9 +226,13 @@ class Script
 
     ideal_tracks = tracks.each_with_index.uniq { |t, i| track_name_artist(t) }.map { |t, i| i }
 
-    to_remove = tracks.each_with_index.reject { |t, i| ideal_tracks.include? i }.map { |t, i| { track: t, positions: [i] } }
+    to_remove = tracks.each_with_index.reject { |t, i| ideal_tracks.include? i }
 
-    remove(playlist, to_remove)
+    p(to_remove.map { |t, i| t }) if @verbose
+
+    to_remove = to_remove.map { |t, i| i }
+
+    playlist.remove_tracks!(to_remove, snapshot_id: playlist.snapshot_id)
   end
 
   def action_each(tracks)
@@ -222,15 +259,8 @@ class Script
     user.player.play_context(device_id = d.id, p.uri)
   end
 
-  def uri_of_currently_playing_context
-    RSpotify.raw_response = true
-    data = JSON.load(user.player.body)
-    RSpotify.raw_response = false
-    data.dig("context", "uri")
-  end
-
   def zipp
-    @zipp ||= user.devices.find { |d| d.name == "ZIPP" }
+    @zipp ||= user.devices.find { |d| d.name == 'ZIPP' }
   end
 
   def play_playlist_on_zipp_named(name)
@@ -243,8 +273,8 @@ class Script
     RSpotify.raw_response = true
     data = JSON.load(user.player.body)
     RSpotify.raw_response = false
-    playing_uri = data&.dig("context", "uri")
-    is_playing = data&.dig("is_playing")
+    playing_uri = data&.dig('context', 'uri')
+    is_playing = data&.dig('is_playing')
 
     # playing_uri = uri_of_currently_playing_context
     if playing_uri == uri
@@ -259,7 +289,30 @@ class Script
   def resume_zipp
     uid = user.id
     params = { device_ids: [zipp.id], play: true }
-    RSpotify::User.oauth_put(uid, "me/player", params.to_json)
+    RSpotify::User.oauth_put(uid, 'me/player', params.to_json)
+  end
+
+  def currently_playing_playlist_uri
+    player
+    RSpotify.raw_response = true
+    r = player.currently_playing
+    RSpotify.raw_response = false
+    json = JSON.load(r)
+    if json.dig('context', 'type') == "playlist"
+      json.dig('context', 'uri')
+    else
+      nil
+    end
+  end
+  
+  def remove_track_from_playing_playlist
+    playlist_uri = currently_playing_playlist_uri
+    playlist_details = RSpotify::Playlist.find_by_id(playlist_uri.split(":").last)
+    raise "#{playlist_details.name} is not yours!" if playlist_details.owner.id != user.id
+    track = player.currently_playing
+    playlist = RSpotify::Playlist.find_by_id(playlist_uri.split(":").last)
+    playlist.remove_tracks!([track], snapshot_id: playlist.snapshot_id)
+    player.next
   end
 end
 
@@ -268,20 +321,37 @@ def collect_values(hashes)
 end
 
 if __FILE__ == $0
-  case ARGV[0]
-  when "resume_zipp"
-    Script.new.resume_zipp
-  when "zipp_weekly_playlist"
-    Script.new.play_playlist_on_zipp("spotify:playlist:7oorBA7hnNJngmox1JNrGW")
-  when "zipp_home"
-    Script.new.play_playlist_on_zipp("spotify:playlist:20IsQZexWUDfjim8Xn3g52")
-  when "zipp_playlist"
-    Script.new.play_playlist_on_zipp_named("Drive Mix")
-  when "clean"
-    Script.new.clean
-  when "pry"
-    Script.new.pry
-  else
-    Script.new.run
+  quiet = ARGV.delete("--quiet")
+
+  begin
+    case ARGV[0]
+    when 'resume_zipp'
+      Script.new.resume_zipp
+    when 'zipp_weekly_playlist'
+      Script.new.play_playlist_on_zipp('spotify:playlist:7oorBA7hnNJngmox1JNrGW')
+    when 'zipp_home'
+      Script.new.play_playlist_on_zipp('spotify:playlist:20IsQZexWUDfjim8Xn3g52')
+    when 'zipp_playlist'
+      Script.new.play_playlist_on_zipp_named('Drive Mix')
+    when 'clean'
+      Script.new.clean
+    when 'dedup'
+      script = Script.new(verbose: true)
+      script.dedup(script.playlist_by_name(ARGV[1]))
+    when 'remove_current_track'
+      Script.new.remove_track_from_playing_playlist
+    when 'pry'
+      Script.new.pry
+    else
+      Script.new.run
+    end
+  rescue => exception
+    if quiet
+      pastel = Pastel.new
+      STDERR.puts(pastel.red.bold(exception))
+      exit 1
+    else
+      raise exception
+    end
   end
 end
