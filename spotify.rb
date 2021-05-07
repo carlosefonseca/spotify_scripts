@@ -147,11 +147,12 @@ class Script
   end
 
   def trim_playlist(playlist)
+    max = 2000
     playlist.complete!
-    while playlist.total > 1000
-      top_limit = [1099, playlist.total - 1].min
-      trks = (1000..top_limit).to_a
-      puts "Snapshot: #{playlist.snapshot_id}; Total: #{playlist.total}; #{(1000..top_limit)}; L: #{trks.length}" if @verbose
+    while playlist.total > max
+      top_limit = [(max+99), playlist.total - 1].min
+      trks = (max..top_limit).to_a
+      puts "Snapshot: #{playlist.snapshot_id}; Total: #{playlist.total}; #{(max..top_limit)}; L: #{trks.length}" if @verbose
       playlist.remove_tracks!(trks, snapshot_id: playlist.snapshot_id)
       playlist.complete!
     end
@@ -287,9 +288,14 @@ class Script
   end
 
   def resume_zipp
-    uid = user.id
-    params = { device_ids: [zipp.id], play: true }
-    RSpotify::User.oauth_put(uid, 'me/player', params.to_json)
+    begin
+      uid = user.id
+      params = { device_ids: [zipp.id], play: true }
+      RSpotify::User.oauth_put(uid, 'me/player', params.to_json)
+    rescue => exception
+      raise "Failed to resume zipp. Params: #{params}"
+    end
+    puts get_currently_playing_playlist.name
   end
 
   def currently_playing_playlist_uri
@@ -305,12 +311,15 @@ class Script
     end
   end
   
-  def remove_track_from_playing_playlist
+  def get_currently_playing_playlist
     playlist_uri = currently_playing_playlist_uri
-    playlist_details = RSpotify::Playlist.find_by_id(playlist_uri.split(":").last)
-    raise "#{playlist_details.name} is not yours!" if playlist_details.owner.id != user.id
+    RSpotify::Playlist.find_by_id(playlist_uri.split(":").last)
+  end
+
+  def remove_track_from_playing_playlist
+    playlist = get_currently_playing_playlist
+    raise "#{playlist.name} is not yours!" if playlist.owner.id != user.id
     track = player.currently_playing
-    playlist = RSpotify::Playlist.find_by_id(playlist_uri.split(":").last)
     playlist.remove_tracks!([track], snapshot_id: playlist.snapshot_id)
     player.next
   end
