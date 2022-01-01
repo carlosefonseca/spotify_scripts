@@ -79,11 +79,11 @@ class Script
 
   def run(tracks_to_remove: recent_tracks)
     playlists_to_modify = ['Drive Mix', 'Weekly Playlist', 'Mix of Daily Mixes', 'Home Mix']
-    user.playlists.select { |p| playlists_to_modify.include? p.name }.each { |p| remove_tracks_by_metadata(tracks_to_remove, p) }
+    user.playlists(limit:50).select { |p| playlists_to_modify.include? p.name }.each { |p| remove_tracks_by_metadata(tracks_to_remove, p) }
 
     log_recently_played_tracks
 
-    plylts = user.playlists.select { |p| playlists_to_modify.include? p.name }.map { |p| [p.name, p.total] }
+    plylts = user.playlists(limit:50).select { |p| playlists_to_modify.include? p.name }.map { |p| [p.name, p.total] }
     plylts += [[recently_played_playlist.name, recently_played_playlist.total]]
     txt = plylts.map { |arr| arr.join(': ') }.join(' | ')
     puts pastel.green.bold(txt)
