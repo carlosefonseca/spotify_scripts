@@ -79,11 +79,12 @@ class Script
 
   def run(tracks_to_remove: recent_tracks)
     playlists_to_modify = ['Drive Mix', 'Weekly Playlist', 'Mix of Daily Mixes', 'Home Mix']
-    user.playlists(limit:50).select { |p| playlists_to_modify.include? p.name }.each { |p| remove_tracks_by_metadata(tracks_to_remove, p) }
+    actual_playlists_to_modify = user.playlists(limit:50).select { |p| playlists_to_modify.include? p.name }
+    actual_playlists_to_modify.each { |p| remove_tracks_by_metadata(tracks_to_remove, p) }
 
     log_recently_played_tracks
 
-    plylts = user.playlists(limit:50).select { |p| playlists_to_modify.include? p.name }.map { |p| [p.name, p.total] }
+    plylts = actual_playlists_to_modify.map { |p| [p.name, p.total] }
     plylts += [[recently_played_playlist.name, recently_played_playlist.total]]
     txt = plylts.map { |arr| arr.join(': ') }.join(' | ')
     puts pastel.green.bold(txt)
@@ -264,12 +265,16 @@ class Script
     @zipp ||= user.devices.find { |d| d.name == 'ZIPP' }
   end
 
+  def computer
+    @zipp ||= user.devices.find { |d| d.name == 'PT-330351-MBP16M1' }
+  end
+
   def play_playlist_on_zipp_named(name)
     play_playlist_on_zipp(playlist_by_name(name).uri)
   end
 
   def play_playlist_on_zipp(uri)
-    run
+    # run
 
     RSpotify.raw_response = true
     data = JSON.load(user.player.body)
@@ -292,10 +297,24 @@ class Script
       uid = user.id
       params = { device_ids: [zipp.id], play: true }
       RSpotify::User.oauth_put(uid, 'me/player', params.to_json)
-    rescue => exception
-      raise "Failed to resume zipp. Params: #{params}"
+      player.volume 20 # causes the warning
+    rescue => e
+      puts "Failed to resume zipp. #{e}\nParams: #{params}"
+      exit 1
     end
-    puts get_currently_playing_playlist.name
+    puts "#{get_currently_playing_playlist.name}\nVolume: #{user.player.device.volume_percent}%"
+  end
+
+  def resume_computer
+    begin
+      uid = user.id
+      params = { device_ids: [computer.id], play: true }
+      RSpotify::User.oauth_put(uid, 'me/player', params.to_json)
+    rescue => e
+      puts "Failed to resume Computer. #{e}\nParams: #{params}"
+      exit 1
+    end
+    puts "#{get_currently_playing_playlist.name}\nVolume: #{user.player.device.volume_percent}%"
   end
 
   def currently_playing_playlist_uri
@@ -319,6 +338,7 @@ class Script
   def remove_track_from_playing_playlist
     playlist = get_currently_playing_playlist
     raise "#{playlist.name} is not yours!" if playlist.owner.id != user.id
+    
     track = player.currently_playing
     playlist.remove_tracks!([track], snapshot_id: playlist.snapshot_id)
     player.next
@@ -336,6 +356,8 @@ if __FILE__ == $0
     case ARGV[0]
     when 'resume_zipp'
       Script.new.resume_zipp
+    when 'resume_computer'
+      Script.new.resume_computer
     when 'zipp_weekly_playlist'
       Script.new.play_playlist_on_zipp('spotify:playlist:7oorBA7hnNJngmox1JNrGW')
     when 'zipp_home'
