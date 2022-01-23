@@ -2,7 +2,7 @@
 
 update() {
 	git fetch
-	git checkout -f origin/main --quiet
+	git checkout -f refs/remotes/origin/main --quiet
 	bundle install --quiet
 }
 
