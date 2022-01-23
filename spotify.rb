@@ -79,7 +79,8 @@ class Script
   def run(tracks_to_remove: recent_tracks)
     playlists_to_modify = ['Drive Mix', 'Weekly Playlist', 'Mix of Daily Mixes', 'Home Mix']
     actual_playlists_to_modify = user.playlists(limit: 50).select { |p| playlists_to_modify.include? p.name }
-    actual_playlists_to_modify.each { |p| remove_tracks_by_metadata(tracks_to_remove, p) }
+    playing_playlist_id = currently_playing_playlist.id
+    actual_playlists_to_modify.each { |p| remove_tracks_by_metadata(tracks_to_remove, p, playing_playlist_id == p.id) }
 
     log_recently_played_tracks
 
@@ -105,13 +106,27 @@ class Script
     end
   end
 
-  def remove_tracks_by_metadata(tracks, playlist)
+  def remove_tracks_by_metadata(tracks, playlist, is_playing)
     all_tracks = load_all_tracks(playlist, market: 'from_token')
     matches = intersect_track_sets_by_metadata(tracks, all_tracks)
     unless matches.empty?
       puts pastel.yellow("Matched tracks to remove from #{playlist.name}:")
       p(matches)
     end
+
+    # puts "CEF: is_playing? #{playlist.name} #{is_playing}"
+    if is_playing
+      first_tracks_on_playlist = all_tracks[0..10]
+      # puts "CEF: first_tracks_on_playlist #{first_tracks_on_playlist.map(&:name).join(', ')}"
+      first_matches = matches & first_tracks_on_playlist
+      # puts "CEF: first_matches #{first_matches.map(&:name).join(', ')}"
+      unless first_matches.empty?
+        first_index = first_matches.map { |t| first_tracks_on_playlist.index(t) }.min
+        tracks_to_prepend = first_tracks_on_playlist[0...first_index]
+        matches = tracks_to_prepend + matches
+      end
+    end
+
     remove_by_position(playlist, matches, all_tracks)
   end
 
@@ -321,7 +336,7 @@ class Script
     puts "Failed to resume zipp. #{e}\nParams: #{params}"
     exit 1
   ensure
-    puts "#{get_currently_playing_playlist.name}\nVolume: #{user.player.device.volume_percent}%"
+    puts "#{currently_playing_playlist.name}\nVolume: #{user.player.device.volume_percent}%"
   end
 
   def resume_computer
@@ -332,7 +347,7 @@ class Script
     puts "Failed to resume Computer. #{e}\nParams: #{params}"
     exit 1
   ensure
-    puts "#{get_currently_playing_playlist.name}\nVolume: #{user.player.device.volume_percent}%"
+    puts "#{currently_playing_playlist.name}\nVolume: #{user.player.device.volume_percent}%"
   end
 
   def currently_playing_playlist_uri
@@ -341,16 +356,18 @@ class Script
     r = player.currently_playing
     RSpotify.raw_response = false
     json = JSON.load(r)
+    return nil unless json
+
     json.dig('context', 'uri') if json.dig('context', 'type') == 'playlist'
   end
 
-  def get_currently_playing_playlist
+  def currently_playing_playlist
     playlist_uri = currently_playing_playlist_uri
-    RSpotify::Playlist.find_by_id(playlist_uri.split(':').last)
+    RSpotify::Playlist.find_by_id(playlist_uri.split(':').last) if playlist_uri
   end
 
   def remove_track_from_playing_playlist
-    playlist = get_currently_playing_playlist
+    playlist = currently_playing_playlist
     raise "#{playlist.name} is not yours!" if playlist.owner.id != user.id
 
     track = player.currently_playing
