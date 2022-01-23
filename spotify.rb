@@ -15,6 +15,7 @@ module RSpotify
       url = 'me/player'
       response = User.oauth_get(@id, url)
       return response if RSpotify.raw_response
+
       response ? Player.new(self, response) : Player.new(self)
     end
   end
@@ -28,9 +29,7 @@ module RSpotify
   end
 end
 
-
 class Script
-
   def pastel
     pastel ||= Pastel.new
   end
@@ -79,36 +78,37 @@ class Script
 
   def run(tracks_to_remove: recent_tracks)
     playlists_to_modify = ['Drive Mix', 'Weekly Playlist', 'Mix of Daily Mixes', 'Home Mix']
-    actual_playlists_to_modify = user.playlists(limit:50).select { |p| playlists_to_modify.include? p.name }
+    actual_playlists_to_modify = user.playlists(limit: 50).select { |p| playlists_to_modify.include? p.name }
     actual_playlists_to_modify.each { |p| remove_tracks_by_metadata(tracks_to_remove, p) }
 
     log_recently_played_tracks
 
-    plylts = actual_playlists_to_modify.map { |p| [p.name, p.total] }
-    plylts += [[recently_played_playlist.name, recently_played_playlist.total]]
-    txt = plylts.map { |arr| arr.join(': ') }.join(' | ')
+    playlists = actual_playlists_to_modify.map { |p| [p.name, p.total] }
+    playlists += [[recently_played_playlist.name, recently_played_playlist.total]]
+    txt = playlists.map { |arr| arr.join(': ') }.join(' | ')
     puts pastel.green.bold(txt)
   end
 
   def intersect_track_sets_by_metadata(tracks1, tracks2)
     ids = tracks1.flat_map { |t| [t.id, t.instance_variable_get('@linked_from')&.id].compact }
-    external_ids = collect_values(tracks1.map { |t| t.external_ids })
-    artistTitles = collect_values(tracks1.map { |t| { t.artists.first.id => t.name.split(' - ').first } })
+    external_ids = collect_values(tracks1.map(&:external_ids))
+    artist_titles = collect_values(tracks1.map { |t| { t.artists.first.id => t.name.split(' - ').first } })
 
-    artistsToNotFilterByTrackName = ['25mFVpuABa9GkGcj9eOPce']
+    artists_to_not_filter_by_track_name = ['25mFVpuABa9GkGcj9eOPce']
 
     tracks2.select do |t|
       ids.include?(t.id) ||
-      ids.include?(t.instance_variable_get('@linked_from')&.id) ||
-      external_ids.include?(t.external_ids) ||
-      ((artistsToNotFilterByTrackName & t.album.artists.map { |a| a.id }).empty?) && ((artistTitles[t.artists.first.id] || []).include?(t.name.split(' - ').first))
+        ids.include?(t.instance_variable_get('@linked_from')&.id) ||
+        external_ids.include?(t.external_ids) ||
+        (artists_to_not_filter_by_track_name & t.album.artists.map(&:id)).empty? &&
+          (artist_titles[t.artists.first.id] || []).include?(t.name.split(' - ').first)
     end
   end
 
   def remove_tracks_by_metadata(tracks, playlist)
     all_tracks = load_all_tracks(playlist, market: 'from_token')
     matches = intersect_track_sets_by_metadata(tracks, all_tracks)
-    if !matches.empty?
+    unless matches.empty?
       puts pastel.yellow("Matched tracks to remove from #{playlist.name}:")
       p(matches)
     end
@@ -116,7 +116,7 @@ class Script
   end
 
   def track_name_artist(track)
-    "#{track.name.split(' - ').first} - #{track.artists.map { |a| a.name }.join(', ')}"
+    "#{track.name.split(' - ').first} - #{track.artists.map(&:name).join(', ')}"
   end
 
   def pry
@@ -125,7 +125,7 @@ class Script
   end
 
   def print_playlists
-    puts user.playlists.map { |p| [p.uri, p.name].join(' ') }
+    puts(user.playlists.map { |p| [p.uri, p.name].join(' ') })
   end
 
   def playlist_by_name(name)
@@ -135,8 +135,8 @@ class Script
   def recently_played_playlist
     def fetch_recently_played_playlist
       p = user.playlists.find { |p| p.name == 'Recently Played' }
-      p = user.create_playlist!('Recently Played') unless p
-      return p
+      p ||= user.create_playlist!('Recently Played')
+      p
     end
 
     @recently_played_playlist ||= fetch_recently_played_playlist
@@ -151,10 +151,12 @@ class Script
     max = 2000
     playlist.complete!
     while playlist.total > max
-      top_limit = [(max+99), playlist.total - 1].min
-      trks = (max..top_limit).to_a
-      puts "Snapshot: #{playlist.snapshot_id}; Total: #{playlist.total}; #{(max..top_limit)}; L: #{trks.length}" if @verbose
-      playlist.remove_tracks!(trks, snapshot_id: playlist.snapshot_id)
+      top_limit = [(max + 99), playlist.total - 1].min
+      tracks = (max..top_limit).to_a
+      if @verbose
+        puts "Snapshot: #{playlist.snapshot_id}; Total: #{playlist.total}; #{max..top_limit}; L: #{tracks.length}"
+      end
+      playlist.remove_tracks!(tracks, snapshot_id: playlist.snapshot_id)
       playlist.complete!
     end
   end
@@ -166,6 +168,7 @@ class Script
     new_tracks = tracks.reject { |t| existing_uris.include? t.uri }
 
     return if new_tracks.empty?
+
     playlist.remove_tracks! new_tracks # remove tracks anywhere in the playlist (played least recently)
     playlist.add_tracks!(new_tracks, position: 0) # add them
   end
@@ -177,7 +180,10 @@ class Script
   end
 
   def print_tracks(tracks)
-    puts tracks.map { |t| [t.id, pastel.blue(t.name), pastel.cyan(t.artists.map { |a| a.name }.join(', '))].join(' - ') }
+    tracks_str = tracks.map do |t|
+      [t.id, pastel.blue(t.name), pastel.cyan(t.artists.map(&:name).join(', '))].join(' - ')
+    end
+    puts tracks_str
     tracks
   end
 
@@ -186,7 +192,14 @@ class Script
   end
 
   def p2(tracks)
-    puts tracks.map { |t| [t.uri, t.name, t.artists.map { |a| a.name }, t.external_ids, t.linked_from1&.id].compact.join(' - ') }
+    tracks_str = tracks.map do |t|
+      [t.uri,
+       t.name,
+       t.artists.map(&:name),
+       t.external_ids,
+       t.linked_from1&.id].compact.join(' - ')
+    end
+    puts(tracks_str)
     tracks
   end
 
@@ -226,25 +239,25 @@ class Script
   def dedup(playlist)
     tracks = load_all_tracks(playlist)
 
-    ideal_tracks = tracks.each_with_index.uniq { |t, i| track_name_artist(t) }.map { |t, i| i }
+    ideal_tracks = tracks.each_with_index.uniq { |t, _i| track_name_artist(t) }.map { |_t, i| i }
 
-    to_remove = tracks.each_with_index.reject { |t, i| ideal_tracks.include? i }
+    to_remove = tracks.each_with_index.reject { |_t, i| ideal_tracks.include? i }
 
-    p(to_remove.map { |t, i| t }) if @verbose
+    p(to_remove.map { |t, _i| t }) if @verbose
 
-    to_remove = to_remove.map { |t, i| i }
+    to_remove = to_remove.map { |_t, i| i }
 
     playlist.remove_tracks!(to_remove, snapshot_id: playlist.snapshot_id)
   end
 
-  def action_each(tracks)
-    tracks.each_slice(100).to_a.reverse.map { |arr| yield arr }
+  def action_each(tracks, &block)
+    tracks.each_slice(100).to_a.reverse.map(&block)
   end
 
   def remove_by_position(playlist, to_remove, playlist_tracks = nil)
     playlist_tracks ||= load_all_tracks(playlist)
     action_each(to_remove) do |arr|
-      positions = playlist_tracks.each_with_index.select { |e, i| arr.include? e }.map { |e, i| i }
+      positions = playlist_tracks.each_with_index.select { |e, _i| arr.include? e }.map { |_e, i| i }
       playlist.remove_tracks!(positions, snapshot_id: playlist.snapshot_id)
     end
   end
@@ -261,12 +274,19 @@ class Script
     user.player.play_context(device_id = d.id, p.uri)
   end
 
+  def device(name)
+    device = user.devices.find { |d| d.name == name }
+    raise "#{name} not found!" unless device
+
+    device
+  end
+
   def zipp
-    @zipp ||= user.devices.find { |d| d.name == 'ZIPP' }
+    @zipp ||= device('ZIPP')
   end
 
   def computer
-    @zipp ||= user.devices.find { |d| d.name == 'PT-330351-MBP16M1' }
+    @computer ||= user.devices.find { |d| d.name == 'PT-330351-MBP16M1' }
   end
 
   def play_playlist_on_zipp_named(name)
@@ -284,36 +304,34 @@ class Script
 
     # playing_uri = uri_of_currently_playing_context
     if playing_uri == uri
-      unless user.player.playing?
-        user.player.play
-      end
+      user.player.play unless user.player.playing?
     else
       user.player.play_context(device_id = zipp.id, uri)
     end
   end
 
   def resume_zipp
-    begin
-      uid = user.id
-      params = { device_ids: [zipp.id], play: true }
-      RSpotify::User.oauth_put(uid, 'me/player', params.to_json)
-      player.volume 20 # causes the warning
-    rescue => e
-      puts "Failed to resume zipp. #{e}\nParams: #{params}"
-      exit 1
-    end
+    return if player.device.name == 'ZIPP'
+
+    uid = user.id
+    params = { device_ids: [zipp.id], play: true }
+    RSpotify::User.oauth_put(uid, 'me/player', params.to_json)
+    player.volume 20 # causes the warning
+  rescue StandardError => e
+    puts "Failed to resume zipp. #{e}\nParams: #{params}"
+    exit 1
+  ensure
     puts "#{get_currently_playing_playlist.name}\nVolume: #{user.player.device.volume_percent}%"
   end
 
   def resume_computer
-    begin
-      uid = user.id
-      params = { device_ids: [computer.id], play: true }
-      RSpotify::User.oauth_put(uid, 'me/player', params.to_json)
-    rescue => e
-      puts "Failed to resume Computer. #{e}\nParams: #{params}"
-      exit 1
-    end
+    uid = user.id
+    params = { device_ids: [computer.id], play: true }
+    RSpotify::User.oauth_put(uid, 'me/player', params.to_json)
+  rescue StandardError => e
+    puts "Failed to resume Computer. #{e}\nParams: #{params}"
+    exit 1
+  ensure
     puts "#{get_currently_playing_playlist.name}\nVolume: #{user.player.device.volume_percent}%"
   end
 
@@ -323,22 +341,18 @@ class Script
     r = player.currently_playing
     RSpotify.raw_response = false
     json = JSON.load(r)
-    if json.dig('context', 'type') == "playlist"
-      json.dig('context', 'uri')
-    else
-      nil
-    end
+    json.dig('context', 'uri') if json.dig('context', 'type') == 'playlist'
   end
-  
+
   def get_currently_playing_playlist
     playlist_uri = currently_playing_playlist_uri
-    RSpotify::Playlist.find_by_id(playlist_uri.split(":").last)
+    RSpotify::Playlist.find_by_id(playlist_uri.split(':').last)
   end
 
   def remove_track_from_playing_playlist
     playlist = get_currently_playing_playlist
     raise "#{playlist.name} is not yours!" if playlist.owner.id != user.id
-    
+
     track = player.currently_playing
     playlist.remove_tracks!([track], snapshot_id: playlist.snapshot_id)
     player.next
@@ -349,8 +363,8 @@ def collect_values(hashes)
   {}.tap { |r| hashes.each { |h| h.each { |k, v| (r[k] ||= Set[]) << v } } }
 end
 
-if __FILE__ == $0
-  quiet = ARGV.delete("--quiet")
+if __FILE__ == $PROGRAM_NAME
+  quiet = ARGV.delete('--quiet')
 
   begin
     case ARGV[0]
@@ -376,13 +390,11 @@ if __FILE__ == $0
     else
       Script.new.run
     end
-  rescue => exception
-    if quiet
-      pastel = Pastel.new
-      STDERR.puts(pastel.red.bold(exception))
-      exit 1
-    else
-      raise exception
-    end
+  rescue StandardError => e
+    raise e unless quiet
+
+    pastel = Pastel.new
+    warn(pastel.red.bold(e))
+    exit 1
   end
 end
