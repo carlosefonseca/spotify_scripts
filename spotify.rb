@@ -79,7 +79,7 @@ class Script
   def run(tracks_to_remove: recent_tracks)
     playlists_to_modify = ['Drive Mix', 'Weekly Playlist', 'Mix of Daily Mixes', 'Home Mix']
     actual_playlists_to_modify = user.playlists(limit: 50).select { |p| playlists_to_modify.include? p.name }
-    playing_playlist_id = currently_playing_playlist.id
+    playing_playlist_id = currently_playing_playlist&.id
     actual_playlists_to_modify.each { |p| remove_tracks_by_metadata(tracks_to_remove, p, playing_playlist_id == p.id) }
 
     log_recently_played_tracks
@@ -326,6 +326,11 @@ class Script
   end
 
   def resume_zipp
+    unless player.is_playing
+      puts 'Nothing is playing.'
+      exit 1
+    end
+
     return if player.device.name == 'ZIPP'
 
     uid = user.id
