@@ -1,13 +1,16 @@
 #!/usr/bin/env ruby
 
 # To Do:
-# - Cache playlists to avoid doing ~20 requests × N playlists every 30 min.
+# - Cache playlists to avoid doing ~20 requests × N playlists every 30 min. # rubocop:todo Style/AsciiComments
+# rubocop:todo Layout/LineLength
 #   - Store the list of tracks, remove tracks from the cache and the server, compare track count, cache the server's snapshot id
+# rubocop:enable Layout/LineLength
 #   - Next run check if the snapshot id is still the same.
 
 require 'rspotify'
 require 'pry'
 require 'pastel'
+require 'rest-client'
 
 module RSpotify
   class User
@@ -22,6 +25,7 @@ module RSpotify
 end
 
 module RSpotify
+  # Extension
   class Track
     def linked_from1
       instance_variable_get('@linked_from')
@@ -29,13 +33,14 @@ module RSpotify
   end
 end
 
+# Main Script Class
 class Script
   def pastel
     pastel ||= Pastel.new
   end
 
   def env
-    @env ||= JSON.load(File.read('env'))
+    @env ||= JSON.parse(File.read('env'))
   end
 
   def initialize(verbose: false)
@@ -56,16 +61,16 @@ class Script
   end
 
   def recent_tracks
-    def fetch_recent_tracks
+    fetch_recent_tracks = lambda {
       recents = user.recently_played(limit: 50)
       if @verbose
         puts 'Recent Tracks:'
         p(recents)
       end
       recents
-    end
+    }
 
-    @recents ||= fetch_recent_tracks
+    @recent_tracks ||= fetch_recent_tracks.call
   end
 
   def all_recently_played
@@ -77,7 +82,7 @@ class Script
   end
 
   def run(tracks_to_remove: recent_tracks)
-    playlists_to_modify = ['Drive Mix', 'Weekly Playlist', 'Mix of Daily Mixes', 'Home Mix']
+    playlists_to_modify = ['Together Mega Mix', 'Weekly Playlist', 'Mix of Daily Mixes', 'Home Mix']
     actual_playlists_to_modify = user.playlists(limit: 50).select { |p| playlists_to_modify.include? p.name }
     playing_playlist_id = currently_playing_playlist&.id
     actual_playlists_to_modify.each { |p| remove_tracks_by_metadata(tracks_to_remove, p, playing_playlist_id == p.id) }
@@ -90,7 +95,7 @@ class Script
     puts pastel.green.bold(txt)
   end
 
-  def intersect_track_sets_by_metadata(tracks1, tracks2)
+  def intersect_track_sets_by_metadata(tracks1, tracks2) # rubocop:todo Metrics/CyclomaticComplexity, Metrics/AbcSize, Metrics/PerceivedComplexity
     ids = tracks1.flat_map { |t| [t.id, t.instance_variable_get('@linked_from')&.id].compact }
     external_ids = collect_values(tracks1.map(&:external_ids))
     artist_titles = collect_values(tracks1.map { |t| { t.artists.first.id => t.name.split(' - ').first } })
@@ -106,7 +111,7 @@ class Script
     end
   end
 
-  def remove_tracks_by_metadata(tracks, playlist, is_playing)
+  def remove_tracks_by_metadata(tracks, playlist, is_playing) # rubocop:todo Metrics/AbcSize
     all_tracks = load_all_tracks(playlist, market: 'from_token')
     matches = intersect_track_sets_by_metadata(tracks, all_tracks)
     unless matches.empty?
@@ -136,7 +141,7 @@ class Script
 
   def pry
     @verbose = true
-    binding.pry(quiet: true)
+    binding.pry(quiet: true) # rubocop:todo Lint/Debugger
   end
 
   def print_playlists
@@ -148,8 +153,8 @@ class Script
   end
 
   def recently_played_playlist
-    def fetch_recently_played_playlist
-      p = user.playlists.find { |p| p.name == 'Recently Played' }
+    def fetch_recently_played_playlist # rubocop:todo Lint/NestedMethodDefinition
+      p = user.playlists.find { |p| p.name == 'Recently Played' } # rubocop:todo Lint/ShadowingOuterLocalVariable
       p ||= user.create_playlist!('Recently Played')
       p
     end
@@ -229,7 +234,7 @@ class Script
   end
 
   def load_all_playlists
-    def _load
+    def _load # rubocop:todo Lint/NestedMethodDefinition
       playlists = []
       while true
         new_playlists = user.playlists(limit: 50, offset: playlists.length)
@@ -285,8 +290,8 @@ class Script
 
   def play_playlist_on_device(playlist_name, device_name)
     p = playlist_by_name playlist_name
-    d = user.devices.find { |d| d.name == device_name }
-    user.player.play_context(device_id = d.id, p.uri)
+    d = user.devices.find { |d| d.name == device_name } # rubocop:todo Lint/ShadowingOuterLocalVariable
+    user.player.play_context(device_id = d.id, p.uri) # rubocop:todo Lint/UselessAssignment
   end
 
   def device(name)
@@ -308,24 +313,24 @@ class Script
     play_playlist_on_zipp(playlist_by_name(name).uri)
   end
 
-  def play_playlist_on_zipp(uri)
+  def play_playlist_on_zipp(uri) # rubocop:todo Metrics/AbcSize
     # run
 
     RSpotify.raw_response = true
     data = JSON.load(user.player.body)
     RSpotify.raw_response = false
     playing_uri = data&.dig('context', 'uri')
-    is_playing = data&.dig('is_playing')
+    is_playing = data&.dig('is_playing') # rubocop:todo Lint/UselessAssignment
 
     # playing_uri = uri_of_currently_playing_context
     if playing_uri == uri
       user.player.play unless user.player.playing?
     else
-      user.player.play_context(device_id = zipp.id, uri)
+      user.player.play_context(device_id = zipp.id, uri) # rubocop:todo Lint/UselessAssignment
     end
   end
 
-  def resume_zipp
+  def resume_zipp # rubocop:todo Metrics/AbcSize
     unless player.is_playing
       puts 'Nothing is playing.'
       exit 1
@@ -379,6 +384,79 @@ class Script
     playlist.remove_tracks!([track], snapshot_id: playlist.snapshot_id)
     player.next
   end
+
+  def playlist_lyrics(id)
+    p = RSpotify::Playlist.find_by_id(id)
+    tracks = p.tracks
+    p(tracks)
+    lyrics_for_tracks(tracks)
+  end
+
+  def lyrics_for_tracks(tracks)
+    tracks.map do |t|
+      artist = t.artists.first.name
+      name = t.name
+      name_artist = "#{artist} - #{name}"
+      puts "# #{name_artist}"
+      puts ''
+      lyrics = get_lyrics(name, artist)
+      if lyrics
+        puts lyrics
+        puts ''
+        [name_artist, lyrics]
+      else
+        puts 'N/A'
+        puts ''
+        [name_artist, 'FAIL']
+      end
+    end
+  end
+
+  def request_song_info(track_name, track_artist)
+    require 'addressable/template'
+    template = Addressable::Template.new('https://api.genius.com/search{?query*}')
+    url = template.expand({ query: { q: "#{track_name} #{track_artist}" } }).to_s
+
+    genius_key = 'zJDhrTb_AArfagDUbwjG5BXLmXNLz507-b85VPeFVvbCwFhyPxNCTVBpOufIDdbC'
+    headers = { 'Authorization': "Bearer #{genius_key}" }
+
+    RestClient.get(url, headers)
+  end
+
+  def check_hits(track_name, track_artist)
+    response = request_song_info(track_name, track_artist)
+
+    json = JSON.parse(response.body)
+    json['response']['hits'].each do |hit|
+      return hit if hit['result']['primary_artist']['name'].downcase.include? track_artist.downcase
+    end
+    nil
+  end
+
+  def get_lyrics(track_name, track_artist)
+    hit = check_hits(track_name, track_artist)
+    return nil unless hit
+
+    hit_url = hit.dig('result', 'url')
+    scrape_lyrics(hit_url)
+  end
+
+  def scrape_lyrics(url)
+    require 'hpricot'
+
+    page = RestClient.get(url).body
+
+    html = Hpricot(page)
+
+    lyrics1 = html.at("//div[@data-lyrics-container='true']")
+    lyrics1.search('br').each { |x| x.swap("\n") }
+    lyrics1.innerText
+  end
+
+  def check_playlist_name_changes(playlists)
+    relevant_playlists = user.playlists(limit: 10).select { |p| playlists.include? p.id }
+    puts relevant_playlists.map { |p| p.name }.join(', ')
+  end
 end
 
 def collect_values(hashes)
@@ -399,7 +477,7 @@ if __FILE__ == $PROGRAM_NAME
     when 'zipp_home'
       Script.new.play_playlist_on_zipp('spotify:playlist:20IsQZexWUDfjim8Xn3g52')
     when 'zipp_playlist'
-      Script.new.play_playlist_on_zipp_named('Drive Mix')
+      Script.new.play_playlist_on_zipp_named('Together Mega Mix')
     when 'clean'
       Script.new.clean
     when 'dedup'
@@ -407,6 +485,10 @@ if __FILE__ == $PROGRAM_NAME
       script.dedup(script.playlist_by_name(ARGV[1]))
     when 'remove_current_track'
       Script.new.remove_track_from_playing_playlist
+    when 'playlist_lyrics'
+      Script.new.playlist_lyrics(ARGV[1])
+    when 'check_playlist_name_changes'
+      Script.new.check_playlist_name_changes(%w[0CHJozYEL8O421waNFDEvE])
     when 'pry'
       Script.new.pry
     else
