@@ -1,7 +1,8 @@
 #!/usr/bin/env ruby
+# frozen_string_literal: true
 
 # To Do:
-# - Cache playlists to avoid doing ~20 requests × N playlists every 30 min. # rubocop:todo Style/AsciiComments
+# - Cache playlists to avoid doing ~20 requests × N playlists every 30 min.
 # rubocop:todo Layout/LineLength
 #   - Store the list of tracks, remove tracks from the cache and the server, compare track count, cache the server's snapshot id
 # rubocop:enable Layout/LineLength
@@ -193,7 +194,8 @@ class Script
     playlist.add_tracks!(new_tracks, position: 0) # add them
   end
 
-  def add_tracks_skip_duplicates(playlist, tracks) # limited to 100 or maybe less
+  # limited to 100 or maybe less
+  def add_tracks_skip_duplicates(playlist, tracks)
     existing = load_all_tracks(playlist).map(&:uri)
     new_tracks = tracks.reject { |t| existing.include? t.uri }
     playlist.add_tracks!(new_tracks, position: 0) unless new_tracks.empty?
@@ -225,7 +227,7 @@ class Script
 
   def load_all_tracks(playlist, market: 'from_token')
     tracks = []
-    while true
+    loop do
       new_tracks = playlist.tracks(offset: tracks.length, market: market)
       tracks += new_tracks
       return tracks if new_tracks.empty?
@@ -236,7 +238,7 @@ class Script
   def load_all_playlists
     def _load # rubocop:todo Lint/NestedMethodDefinition
       playlists = []
-      while true
+      loop do
         new_playlists = user.playlists(limit: 50, offset: playlists.length)
         playlists += new_playlists
         return playlists if new_playlists.empty?
@@ -248,7 +250,7 @@ class Script
 
   def load_saved_tracks(market: 'from_token')
     tracks = []
-    while true
+    loop do
       new_tracks = user.saved_tracks(offset: tracks.length, market: market)
       tracks += new_tracks
       return tracks if new_tracks.empty?
@@ -306,18 +308,21 @@ class Script
   end
 
   def computer
-    @computer ||= user.devices.find { |d| d.name == 'PT-330351-MBP16M1' }
+    @computer ||= # user.devices.find { |d| d.name == 'PT-330351-MBP16M1' }
+      user.devices.find do |d|
+        d.type == 'Computer'
+      end
   end
 
   def play_playlist_on_zipp_named(name)
     play_playlist_on_zipp(playlist_by_name(name).uri)
   end
 
-  def play_playlist_on_zipp(uri) # rubocop:todo Metrics/AbcSize
+  def play_playlist_on_zipp(uri, shuffle: nil) # rubocop:todo Metrics/AbcSize
     # run
 
     RSpotify.raw_response = true
-    data = JSON.load(user.player.body)
+    data = JSON.parse(user.player.body)
     RSpotify.raw_response = false
     playing_uri = data&.dig('context', 'uri')
     is_playing = data&.dig('is_playing') # rubocop:todo Lint/UselessAssignment
@@ -326,6 +331,7 @@ class Script
     if playing_uri == uri
       user.player.play unless user.player.playing?
     else
+      user.player.shuffle(device_id: zipp.id, state: shuffle) unless shuffle.nil?
       user.player.play_context(device_id = zipp.id, uri) # rubocop:todo Lint/UselessAssignment
     end
   end
@@ -346,7 +352,7 @@ class Script
     puts "Failed to resume zipp. #{e}\nParams: #{params}"
     exit 1
   ensure
-    puts "#{currently_playing_playlist.name}\nVolume: #{user.player.device.volume_percent}%"
+    puts "#{currently_playing_playlist&.name}\nVolume: #{user.player.device.volume_percent}%"
   end
 
   def resume_computer
@@ -365,7 +371,7 @@ class Script
     RSpotify.raw_response = true
     r = player.currently_playing
     RSpotify.raw_response = false
-    json = JSON.load(r)
+    json = JSON.parse(r)
     return nil unless json
 
     json.dig('context', 'uri') if json.dig('context', 'type') == 'playlist'
@@ -455,7 +461,7 @@ class Script
 
   def check_playlist_name_changes(playlists)
     relevant_playlists = user.playlists(limit: 10).select { |p| playlists.include? p.id }
-    puts relevant_playlists.map { |p| p.name }.join(', ')
+    puts relevant_playlists.map(&:name).join(', ')
   end
 end
 
@@ -473,7 +479,7 @@ if __FILE__ == $PROGRAM_NAME
     when 'resume_computer'
       Script.new.resume_computer
     when 'zipp_weekly_playlist'
-      Script.new.play_playlist_on_zipp('spotify:playlist:7oorBA7hnNJngmox1JNrGW')
+      Script.new.play_playlist_on_zipp('spotify:playlist:7oorBA7hnNJngmox1JNrGW', shuffle: false)
     when 'zipp_home'
       Script.new.play_playlist_on_zipp('spotify:playlist:20IsQZexWUDfjim8Xn3g52')
     when 'zipp_playlist'
