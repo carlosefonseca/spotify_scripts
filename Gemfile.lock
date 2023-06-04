@@ -65,9 +65,9 @@ PLATFORMS
   ruby
 
 DEPENDENCIES
-  pastel (~> 0.8.0)
+  pastel
   pry
-  rspotify (~> 2.9)
+  rspotify
 
 BUNDLED WITH
    2.3.26
