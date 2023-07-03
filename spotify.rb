@@ -375,7 +375,7 @@ class Script
     RSpotify.raw_response = true
     r = player.currently_playing
     RSpotify.raw_response = false
-    return nil if json == ''
+    return nil if r == ''
 
     json = JSON.parse(r)
     return nil unless json
