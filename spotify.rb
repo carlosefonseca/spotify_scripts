@@ -321,8 +321,12 @@ class Script
   def play_playlist_on_zipp(uri, shuffle: nil) # rubocop:todo Metrics/AbcSize
     # run
 
+    data = nil
     RSpotify.raw_response = true
-    data = JSON.parse(user.player.body)
+    begin
+      data = JSON.parse(user.player.body)
+    rescue StandardError
+    end
     RSpotify.raw_response = false
     playing_uri = data&.dig('context', 'uri')
     is_playing = data&.dig('is_playing') # rubocop:todo Lint/UselessAssignment
@@ -371,6 +375,8 @@ class Script
     RSpotify.raw_response = true
     r = player.currently_playing
     RSpotify.raw_response = false
+    return nil if json == ''
+
     json = JSON.parse(r)
     return nil unless json
 
