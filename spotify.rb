@@ -346,6 +346,7 @@ class Script
       exit 1
     end
 
+    begin
     return if player.device.name == 'ZIPP'
 
     uid = user.id
@@ -358,6 +359,7 @@ class Script
   ensure
     puts "#{currently_playing_playlist&.name}\nVolume: #{user.player.device.volume_percent}%"
   end
+end
 
   def resume_computer
     uid = user.id
