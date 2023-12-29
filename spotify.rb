@@ -355,7 +355,14 @@ class Script
       RSpotify::User.oauth_put(uid, 'me/player', params.to_json)
       player.volume 20 # causes the warning
 
-      sleep(0.1) until user.player && user.player.device
+      puts "Player: #{user.player}"
+      puts "Playing: #{user.player.playing?}"
+      puts "Device: #{user.player.device}"
+      
+      until user.player && user.player.device do
+        puts "Sleeping..."
+        sleep(0.1) 
+      end
 
     rescue StandardError => e
       puts "Failed to resume zipp. #{e}\nParams: #{params}"
@@ -369,6 +376,11 @@ class Script
     uid = user.id
     params = { device_ids: [computer.id], play: true }
     RSpotify::User.oauth_put(uid, 'me/player', params.to_json)
+    until user.player && user.player.device do
+      puts "Sleeping..."
+      sleep(0.1) 
+    end
+    user.player.volume(50)
   rescue StandardError => e
     puts "Failed to resume Computer. #{e}\nParams: #{params}"
     exit 1
