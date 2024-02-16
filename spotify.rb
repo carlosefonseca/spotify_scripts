@@ -338,7 +338,7 @@ class Script
       user.player.shuffle(device_id: zipp.id, state: shuffle) unless shuffle.nil?
       user.player.play_context(device_id = zipp.id, uri) # rubocop:todo Lint/UselessAssignment
     end
-    player.volume 20 # causes the warning
+    player.volume 10 # causes the warning
   end
 
   def resume_zipp # rubocop:todo Metrics/AbcSize
@@ -353,8 +353,7 @@ class Script
       uid = user.id
       params = { device_ids: [zipp.id], play: true }
       RSpotify::User.oauth_put(uid, 'me/player', params.to_json)
-      player.volume 20 # causes the warning
-
+      
       puts "Player: #{user.player}"
       puts "Playing: #{user.player.playing?}"
       puts "Device: #{user.player.device}"
@@ -363,7 +362,8 @@ class Script
         puts "Sleeping..."
         sleep(0.1) 
       end
-
+      player.volume 10 # causes the warning
+      
     rescue StandardError => e
       puts "Failed to resume zipp. #{e}\nParams: #{params}"
       exit 1
