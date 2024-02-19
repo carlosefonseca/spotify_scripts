@@ -9,3 +9,6 @@ gem 'rspotify'
 gem 'pry'
 
 gem 'pastel'
+
+gem "tty-prompt"
+gem "tty-table"

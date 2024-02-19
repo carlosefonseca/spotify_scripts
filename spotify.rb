@@ -12,6 +12,7 @@ require 'rspotify'
 require 'pry'
 require 'pastel'
 require 'rest-client'
+require "tty-prompt"
 
 module RSpotify
   class User
@@ -487,6 +488,33 @@ class Script
     relevant_playlists = user.playlists(limit: 10).select { |p| playlists.include? p.id }
     puts relevant_playlists.map(&:name).join(', ')
   end
+
+  def import(artist, tracks)
+    require 'tty-table'
+    table = TTY::Table.new(header: ["Search","Match"])
+
+    tracks_str = tracks.map do |t|
+      
+    end
+    puts tracks_str
+    tracks
+
+    found_tracks = tracks.flat_map do |t| 
+      search = "#{artist} - #{t}"
+      puts search
+      track = RSpotify::Track.search(search, limit: 1)[0]
+      track_str = [track.name, track.artists.map(&:name).join(', ')].join(' - ')
+      table << [search, track_str]
+      track
+    end
+
+    puts table.render(:unicode)
+
+    playlist = user.create_playlist!("#{artist} import")
+    playlist.add_tracks!(found_tracks)
+    puts playlist.uri
+    playlist
+  end
 end
 
 def collect_values(hashes)
@@ -519,6 +547,11 @@ if __FILE__ == $PROGRAM_NAME
       Script.new.playlist_lyrics(ARGV[1])
     when 'check_playlist_name_changes'
       Script.new.check_playlist_name_changes(%w[0CHJozYEL8O421waNFDEvE])
+    when 'import'
+      prompt = TTY::Prompt.new
+      artist = prompt.ask("What's the artist name?")
+      tracks = prompt.multiline("Enter the tracks for #{artist}").map{|l|l.strip}
+      Script.new.import(artist, tracks)
     when 'pry'
       Script.new.pry
     else
