@@ -309,10 +309,7 @@ class Script
   end
 
   def computer
-    @computer ||= # user.devices.find { |d| d.name == 'PT-330351-MBP16M1' }
-      user.devices.find do |d|
-        d.type == 'Computer'
-      end
+    @computer ||= user.devices.find { |d| d.name == `hostname`.strip }
   end
 
   def play_playlist_on_zipp_named(name)
