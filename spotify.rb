@@ -156,7 +156,7 @@ class Script
 
   def recently_played_playlist
     def fetch_recently_played_playlist # rubocop:todo Lint/NestedMethodDefinition
-      p = user.playlists.find { |p| p.name == 'Recently Played' } # rubocop:todo Lint/ShadowingOuterLocalVariable
+      p = load_all_playlists.find { |p| p.name == 'Recently Played' } # rubocop:todo Lint/ShadowingOuterLocalVariable
       p ||= user.create_playlist!('Recently Played')
       p
     end
