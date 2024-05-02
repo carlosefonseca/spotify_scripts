@@ -309,7 +309,7 @@ class Script
   end
 
   def computer
-    @computer ||= user.devices.find { |d| d.name == `hostname`.strip }
+    @computer ||= user.devices.find { |d| d.name == `hostname`.strip.delete_suffix(".local") }
   end
 
   def play_playlist_on_zipp_named(name)
