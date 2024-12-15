@@ -285,6 +285,24 @@ class Script
     end
   end
 
+  def clear_playlist(playlist)
+    playlist_tracks ||= load_all_tracks(playlist)
+    action_each(playlist_tracks) do |section|
+      playlist.remove_tracks! section
+    end
+  end
+
+  def add_tracks_to_playlist(tracks, playlist)
+    action_each(tracks) do |section|
+      playlist.add_tracks! section
+    end
+  end
+
+  def replace_all_tracks_on_playlist(tracks, playlist)
+    clear_playlist(playlist)
+    add_tracks_to_playlist(tracks, playlist)
+  end
+
   def remove(playlist, to_remove)
     action_each(to_remove) do |arr|
       playlist.remove_tracks! arr
@@ -512,6 +530,14 @@ class Script
     puts playlist.uri
     playlist
   end
+  
+  def shuffle_run_mad
+    rm1 = playlist_by_name("run mad")
+    rm2 = playlist_by_name("run mad 2")
+    srm = playlist_by_name("Shuffle Run Mad")
+    shuffle = (rm1.tracks + rm2.tracks).shuffle
+    replace_all_tracks_on_playlist(shuffle, srm)
+  end
 end
 
 def collect_values(hashes)
@@ -544,6 +570,8 @@ if __FILE__ == $PROGRAM_NAME
       Script.new.playlist_lyrics(ARGV[1])
     when 'check_playlist_name_changes'
       Script.new.check_playlist_name_changes(%w[0CHJozYEL8O421waNFDEvE])
+    when 'shuffle_run_mad'
+      Script.new.shuffle_run_mad
     when 'import'
       prompt = TTY::Prompt.new
       artist = prompt.ask("What's the artist name?")
