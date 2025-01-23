@@ -83,6 +83,16 @@ class Script
     run(tracks_to_remove: all_recently_played + recent_tracks)
   end
 
+  def create_playlist_version_without_recently_played(playlist)
+    tracks = load_all_tracks(playlist)
+    tracks_to_remove = intersect_track_sets_by_metadata(all_recently_played, tracks)
+    new_tracks = (tracks - tracks_to_remove).shuffle
+    new_playlist_name = playlist.name + ' (Without Recents)'
+    new_playlist = playlist_by_name(new_playlist_name) || user.create_playlist!(new_playlist_name)
+    replace_all_tracks_on_playlist(new_tracks, new_playlist)
+    new_playlist
+  end
+
   def run(tracks_to_remove: recent_tracks)
     playlists_to_modify = ['Together Mega Mix', 'Weekly Playlist', 'Mix of Daily Mixes', 'Home Mix']
     actual_playlists_to_modify = user.playlists(limit: 50).select { |p| playlists_to_modify.include? p.name }
@@ -114,7 +124,7 @@ class Script
   end
 
   def remove_tracks_by_metadata(tracks, playlist, is_playing) # rubocop:todo Metrics/AbcSize
-    all_tracks = load_all_tracks(playlist, market: 'from_token')
+    all_tracks = load_all_tracks(playlist, market: nil)
     matches = intersect_track_sets_by_metadata(tracks, all_tracks)
     unless matches.empty?
       puts pastel.yellow("Matched tracks to remove from #{playlist.name}:")
@@ -188,7 +198,7 @@ class Script
 
   def add_tracks_replace_duplicates(playlist, tracks)
     # fetch the first 50 tracks (most recently played)
-    existing_uris = playlist.tracks(market: 'from_token').map(&:uri)
+    existing_uris = playlist.tracks(market: nil).map(&:uri)
     # find the tracks that were not recently played already
     new_tracks = tracks.reject { |t| existing_uris.include? t.uri }
 
@@ -229,7 +239,7 @@ class Script
     tracks
   end
 
-  def load_all_tracks(playlist, market: 'from_token')
+  def load_all_tracks(playlist, market: nil)
     tracks = []
     loop do
       new_tracks = playlist.tracks(offset: tracks.length, market: market)
@@ -252,7 +262,7 @@ class Script
     @playlists ||= _load
   end
 
-  def load_saved_tracks(market: 'from_token')
+  def load_saved_tracks(market: nil)
     tracks = []
     loop do
       new_tracks = user.saved_tracks(offset: tracks.length, market: market)
@@ -586,6 +596,9 @@ if __FILE__ == $PROGRAM_NAME
       Script.new.check_playlist_name_changes(%w[0CHJozYEL8O421waNFDEvE])
     when 'shuffle_run_mad'
       Script.new.shuffle_run_mad
+    when 'create_playlist_version_without_recently_played'
+      script = Script.new
+      script.create_playlist_version_without_recently_played(script.playlist_by_uri(ARGV[1]))
     when 'import'
       prompt = TTY::Prompt.new
       artist = prompt.ask("What's the artist name?")
@@ -593,6 +606,25 @@ if __FILE__ == $PROGRAM_NAME
       Script.new.import(artist, tracks)
     when 'pry'
       Script.new.pry
+    when 'help'
+      puts <<~HELP
+        Commands:
+        - resume_zipp
+        - resume_computer
+        - zipp_weekly_playlist
+        - zipp_home
+        - zipp_playlist
+        - clean
+        - dedup <playlist_name>
+        - remove_current_track
+        - playlist_lyrics <playlist_id>
+        - check_playlist_name_changes
+        - shuffle_run_mad
+        - create_playlist_version_without_recently_played <playlist_uri>
+        - import
+        - pry
+        - help
+      HELP
     else
       Script.new.run
     end
