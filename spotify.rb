@@ -154,14 +154,17 @@ class Script
     load_all_playlists.find { |p| p.name == name }
   end
 
-  def recently_played_playlist
-    def fetch_recently_played_playlist # rubocop:todo Lint/NestedMethodDefinition
-      p = load_all_playlists.find { |p| p.name == 'Recently Played' } # rubocop:todo Lint/ShadowingOuterLocalVariable
-      p ||= user.create_playlist!('Recently Played')
-      p
-    end
+  def id_of_uri(uri)
+    uri.split(':').last
+  end
 
-    @recently_played_playlist ||= fetch_recently_played_playlist
+  def playlist_by_uri(uri)
+    id = id_of_uri(uri)
+    RSpotify::Playlist.find_by_id(id)
+  end
+
+  def recently_played_playlist
+    @recently_played_playlist ||= playlist_by_uri("spotify:playlist:0UmRcaAtlntTFAxq0vHH3r")
   end
 
   def log_recently_played_tracks
@@ -287,8 +290,9 @@ class Script
 
   def clear_playlist(playlist)
     playlist_tracks ||= load_all_tracks(playlist)
-    action_each(playlist_tracks) do |section|
-      playlist.remove_tracks! section
+    action_each(playlist_tracks) do |arr|
+      positions = playlist_tracks.each_with_index.select { |e, _i| arr.include? e }.map { |_e, i| i }
+      playlist.remove_tracks!(positions, snapshot_id: playlist.snapshot_id)
     end
   end
 
@@ -300,6 +304,8 @@ class Script
 
   def replace_all_tracks_on_playlist(tracks, playlist)
     clear_playlist(playlist)
+    clear_playlist(playlist)
+    playlist.complete!
     add_tracks_to_playlist(tracks, playlist)
   end
 
@@ -419,7 +425,7 @@ class Script
 
   def currently_playing_playlist
     playlist_uri = currently_playing_playlist_uri
-    RSpotify::Playlist.find_by_id(playlist_uri.split(':').last) if playlist_uri
+    playlist_by_uri(playlist_uri) if playlist_uri
   end
 
   def remove_track_from_playing_playlist
@@ -538,6 +544,14 @@ class Script
     shuffle = (rm1.tracks + rm2.tracks).shuffle
     replace_all_tracks_on_playlist(shuffle, srm)
   end
+
+  def shuffle_playlist(playlist: nil, playlist_name: nil, playlist_uri: nil)
+    playlist = playlist || playlist_by_name(playlist_name) || playlist_by_uri(playlist_uri)
+    tracks = load_all_tracks(playlist, market: nil)
+    shuffle = tracks.shuffle
+    replace_all_tracks_on_playlist(shuffle, playlist)
+  end
+
 end
 
 def collect_values(hashes)
