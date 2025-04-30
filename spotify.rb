@@ -85,8 +85,7 @@ class Script
 
   def create_playlist_version_without_recently_played(playlist)
     tracks = load_all_tracks(playlist)
-    tracks_to_remove = intersect_track_sets_by_metadata(all_recently_played, tracks)
-    new_tracks = (tracks - tracks_to_remove).shuffle
+    new_tracks = subtract_track_sets_by_metadata(all_recently_played, tracks)
     new_playlist_name = playlist.name + ' (Without Recents)'
     new_playlist = playlist_by_name(new_playlist_name) || user.create_playlist!(new_playlist_name)
     replace_all_tracks_on_playlist(new_tracks, new_playlist)
@@ -115,6 +114,20 @@ class Script
     artists_to_not_filter_by_track_name = ['25mFVpuABa9GkGcj9eOPce']
 
     tracks2.select do |t|
+      ids.include?(t.id) ||
+        ids.include?(t.instance_variable_get('@linked_from')&.id) ||
+        external_ids.include?(t.external_ids) ||
+        (artists_to_not_filter_by_track_name & t.album.artists.map(&:id)).empty? &&
+          (artist_titles[t.artists.first.id] || []).include?(t.name.split(' - ').first)
+    end
+  end
+
+  def subtract_tracks_by_metadata(tracks1, tracks2)
+    ids = tracks2.flat_map { |t| [t.id, t.instance_variable_get('@linked_from')&.id].compact }
+    external_ids = collect_values(tracks2.map(&:external_ids))
+    artist_titles = collect_values(tracks2.map { |t| { t.artists.first.id => t.name.split(' - ').first } })
+    artists_to_not_filter_by_track_name = ['25mFVpuABa9GkGcj9eOPce']
+    tracks1.reject do |t|
       ids.include?(t.id) ||
         ids.include?(t.instance_variable_get('@linked_from')&.id) ||
         external_ids.include?(t.external_ids) ||
@@ -317,6 +330,12 @@ class Script
     clear_playlist(playlist)
     playlist.complete!
     add_tracks_to_playlist(tracks, playlist)
+  end
+
+  def save_tracks_to_playlist_named(new_playlist_name, tracks)
+    new_playlist = playlist_by_name(new_playlist_name) || user.create_playlist!(new_playlist_name)
+    add_tracks_to_playlist(tracks, new_playlist)
+    new_playlist
   end
 
   def remove(playlist, to_remove)
@@ -562,6 +581,13 @@ class Script
     replace_all_tracks_on_playlist(shuffle, playlist)
   end
 
+  def playlist_without_playlist(p1, p2, p3=nil)
+    tracks1 = load_all_tracks(p1, market: nil)
+    tracks2 = load_all_tracks(p2, market: nil)
+    tracks = subtract_tracks_by_metadata(tracks1, tracks2)
+    save_tracks_to_playlist_named("#{p1.name} without #{p2.name}", tracks)
+  end
+
 end
 
 def collect_values(hashes)
@@ -599,6 +625,11 @@ if __FILE__ == $PROGRAM_NAME
     when 'create_playlist_version_without_recently_played'
       script = Script.new
       script.create_playlist_version_without_recently_played(script.playlist_by_uri(ARGV[1]))
+    when 'playlist_without_playlist'
+      script = Script.new
+      playlist1 = ARGV[1] == 'current' ? script.currently_playing_playlist : script.playlist_by_uri(ARGV[1])
+      playlist2 = ARGV[2] == 'current' ? script.currently_playing_playlist : script.playlist_by_uri(ARGV[2])
+      script.playlist_without_playlist(playlist1, playlist2)
     when 'import'
       prompt = TTY::Prompt.new
       artist = prompt.ask("What's the artist name?")
@@ -621,6 +652,7 @@ if __FILE__ == $PROGRAM_NAME
         - check_playlist_name_changes
         - shuffle_run_mad
         - create_playlist_version_without_recently_played <playlist_uri>
+        - playlist_without_playlist <playlist_uri> <playlist_uri> ('current' for the current playlist)
         - import
         - pry
         - help
