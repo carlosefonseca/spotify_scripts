@@ -12,7 +12,7 @@ require 'rspotify'
 require 'pry'
 require 'pastel'
 require 'rest-client'
-require "tty-prompt"
+require 'tty-prompt'
 
 module RSpotify
   class User
@@ -182,12 +182,37 @@ class Script
   end
 
   def playlist_by_uri(uri)
+    puts "playlist_by_uri: #{uri}" if @verbose
     id = id_of_uri(uri)
     RSpotify::Playlist.find_by_id(id)
   end
 
+  def get_playlist(input)
+    if input == 'current'
+      return currently_playing_playlist if currently_playing_playlist
+
+      raise 'No currently playing playlist found!'
+    end
+
+    if input == 'recents'
+      return recently_played_playlist if recently_played_playlist
+
+      raise 'No recently played playlist found!'
+    end
+
+    if input.start_with?('https://open.spotify.com/playlist/')
+      uri = 'spotify:playlist:' + uri.split('/').last.split('?').first
+    end
+
+    if uri.start_with?('spotify:playlist:')
+      playlist_by_uri(id)
+    else
+      playlist_by_name(uri)
+    end
+  end
+
   def recently_played_playlist
-    @recently_played_playlist ||= playlist_by_uri("spotify:playlist:0UmRcaAtlntTFAxq0vHH3r")
+    @recently_played_playlist ||= playlist_by_uri('spotify:playlist:0UmRcaAtlntTFAxq0vHH3r')
   end
 
   def log_recently_played_tracks
@@ -334,6 +359,7 @@ class Script
 
   def save_tracks_to_playlist_named(new_playlist_name, tracks)
     new_playlist = playlist_by_name(new_playlist_name) || user.create_playlist!(new_playlist_name)
+    clear_playlist(new_playlist)
     add_tracks_to_playlist(tracks, new_playlist)
     new_playlist
   end
@@ -362,7 +388,7 @@ class Script
   end
 
   def computer
-    @computer ||= user.devices.find { |d| d.name == `hostname`.strip.delete_suffix(".local") }
+    @computer ||= user.devices.find { |d| d.name == `hostname`.strip.delete_suffix('.local') }
   end
 
   def play_playlist_on_zipp_named(name)
@@ -404,17 +430,16 @@ class Script
       uid = user.id
       params = { device_ids: [zipp.id], play: true }
       RSpotify::User.oauth_put(uid, 'me/player', params.to_json)
-      
+
       puts "Player: #{user.player}"
       puts "Playing: #{user.player.playing?}"
       puts "Device: #{user.player.device}"
-      
-      until user.player && user.player.device do
-        puts "Sleeping..."
-        sleep(0.1) 
+
+      until user.player && user.player.device
+        puts 'Sleeping...'
+        sleep(0.1)
       end
       player.volume 10 # causes the warning
-      
     rescue StandardError => e
       puts "Failed to resume zipp. #{e}\nParams: #{params}"
       exit 1
@@ -427,9 +452,9 @@ class Script
     uid = user.id
     params = { device_ids: [computer.id], play: true }
     RSpotify::User.oauth_put(uid, 'me/player', params.to_json)
-    until user.player && user.player.device do
-      puts "Sleeping..."
-      sleep(0.1) 
+    until user.player && user.player.device
+      puts 'Sleeping...'
+      sleep(0.1)
     end
     user.player.volume(50)
   rescue StandardError => e
@@ -541,15 +566,13 @@ class Script
 
   def import(artist, tracks)
     require 'tty-table'
-    table = TTY::Table.new(header: ["Search","Match"])
+    table = TTY::Table.new(header: %w[Search Match])
 
     tracks_str = tracks.map do |t|
-      
     end
     puts tracks_str
-    tracks
 
-    found_tracks = tracks.flat_map do |t| 
+    found_tracks = tracks.flat_map do |t|
       search = "#{artist} - #{t}"
       puts search
       track = RSpotify::Track.search(search, limit: 1)[0]
@@ -565,11 +588,11 @@ class Script
     puts playlist.uri
     playlist
   end
-  
+
   def shuffle_run_mad
-    rm1 = playlist_by_name("run mad")
-    rm2 = playlist_by_name("run mad 2")
-    srm = playlist_by_name("Shuffle Run Mad")
+    rm1 = playlist_by_name('run mad')
+    rm2 = playlist_by_name('run mad 2')
+    srm = playlist_by_name('Shuffle Run Mad')
     shuffle = (rm1.tracks + rm2.tracks).shuffle
     replace_all_tracks_on_playlist(shuffle, srm)
   end
@@ -581,13 +604,34 @@ class Script
     replace_all_tracks_on_playlist(shuffle, playlist)
   end
 
-  def playlist_without_playlist(p1, p2, p3=nil)
+  def playlist_without_playlist(p1, p2, shuffle: false)
     tracks1 = load_all_tracks(p1, market: nil)
     tracks2 = load_all_tracks(p2, market: nil)
     tracks = subtract_tracks_by_metadata(tracks1, tracks2)
+    tracks = tracks.shuffle if shuffle
     save_tracks_to_playlist_named("#{p1.name} without #{p2.name}", tracks)
   end
 
+  def select_saved_tracks(tracks)
+    tracks.each_slice(50).to_a.flat_map do |a|
+      result = user.saved_tracks? a
+      a.zip(result).select { |_, r| r }.map(&:first)
+    end
+  end
+
+  def select_not_saved_tracks(tracks)
+    tracks.each_slice(50).to_a.flat_map do |a|
+      result = user.saved_tracks? a
+      a.zip(result).reject { |_, r| r }.map(&:first)
+    end
+  end
+
+  def playlist_without_saved(p1, shuffle: false)
+    tracks1 = load_all_tracks(p1, market: nil)
+    tracks2 = select_not_saved_tracks(tracks1)
+    tracks2 = tracks2.shuffle if shuffle
+    save_tracks_to_playlist_named("#{p1.name} (not saved)", tracks2)
+  end
 end
 
 def collect_values(hashes)
@@ -622,18 +666,26 @@ if __FILE__ == $PROGRAM_NAME
       Script.new.check_playlist_name_changes(%w[0CHJozYEL8O421waNFDEvE])
     when 'shuffle_run_mad'
       Script.new.shuffle_run_mad
-    when 'create_playlist_version_without_recently_played'
-      script = Script.new
-      script.create_playlist_version_without_recently_played(script.playlist_by_uri(ARGV[1]))
-    when 'playlist_without_playlist'
-      script = Script.new
-      playlist1 = ARGV[1] == 'current' ? script.currently_playing_playlist : script.playlist_by_uri(ARGV[1])
-      playlist2 = ARGV[2] == 'current' ? script.currently_playing_playlist : script.playlist_by_uri(ARGV[2])
+    when 'playlist_without_recently_played'
+      script = Script.new(verbose: true)
+      playlist1 = script.get_playlist(ARGV[1])
+      playlist2 = script.recently_played_playlist
       script.playlist_without_playlist(playlist1, playlist2)
+    when 'playlist_without_playlist'
+      script = Script.new(verbose: true)
+      playlist1 = script.get_playlist(ARGV[1])
+      playlist2 = script.get_playlist(ARGV[2])
+      shuffle = ARGV[3].include?('shuffle')
+      script.playlist_without_playlist(playlist1, playlist2, shuffle: shuffle)
+    when 'playlist_without_saved'
+      script = Script.new(verbose: true)
+      playlist1 = script.get_playlist(ARGV[1])
+      shuffle = ARGV[2].include?('shuffle')
+      script.playlist_without_saved(playlist1, shuffle: shuffle)
     when 'import'
       prompt = TTY::Prompt.new
       artist = prompt.ask("What's the artist name?")
-      tracks = prompt.multiline("Enter the tracks for #{artist}").map{|l|l.strip}
+      tracks = prompt.multiline("Enter the tracks for #{artist}").map { |l| l.strip }
       Script.new.import(artist, tracks)
     when 'pry'
       Script.new.pry
@@ -651,11 +703,15 @@ if __FILE__ == $PROGRAM_NAME
         - playlist_lyrics <playlist_id>
         - check_playlist_name_changes
         - shuffle_run_mad
-        - create_playlist_version_without_recently_played <playlist_uri>
-        - playlist_without_playlist <playlist_uri> <playlist_uri> ('current' for the current playlist)
+        - playlist_without_recently_played <playlist_uri>
+        - playlist_without_playlist <playlist_uri> <playlist_uri> [shuffle]
+        - playlist_without_saved <playlist_uri> [shuffle]
         - import
         - pry
         - help
+
+        Note:
+        - playlist_uri can be 'current', 'recents', a playlist URI, or a playlist URL.
       HELP
     else
       Script.new.run

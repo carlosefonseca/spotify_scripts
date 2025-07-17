@@ -10,6 +10,8 @@ gem 'pry'
 
 gem 'pastel'
 
-gem "tty-prompt"
-gem "tty-table"
-gem "base64"
+gem 'base64'
+gem 'tty-prompt'
+gem 'tty-table'
+
+gem 'rubocop'
