@@ -201,13 +201,13 @@ class Script
     end
 
     if input.start_with?('https://open.spotify.com/playlist/')
-      uri = 'spotify:playlist:' + uri.split('/').last.split('?').first
+      input = 'spotify:playlist:' + uri.split('/').last.split('?').first
     end
 
-    if uri.start_with?('spotify:playlist:')
+    if input.start_with?('spotify:playlist:')
       playlist_by_uri(id)
     else
-      playlist_by_name(uri)
+      playlist_by_name(input)
     end
   end
 
