@@ -93,8 +93,9 @@ class Script
   end
 
   def run(tracks_to_remove: recent_tracks)
-    playlists_to_modify = ['Together Mega Mix', 'Weekly Playlist', 'Mix of Daily Mixes', 'Home Mix']
-    actual_playlists_to_modify = user.playlists(limit: 50).select { |p| playlists_to_modify.include? p.name }
+    # playlists_to_modify = ['Together Mega Mix', 'Weekly Playlist', 'Mix of Daily Mixes', 'Home Mix']
+    playlists_to_modify = ['Together Mega Mix']
+    actual_playlists_to_modify = playlists_to_modify.map { |name| playlist_by_name(name) }.compact
     playing_playlist_id = currently_playing_playlist&.id
     actual_playlists_to_modify.each { |p| remove_tracks_by_metadata(tracks_to_remove, p, playing_playlist_id == p.id) }
 
@@ -174,7 +175,7 @@ class Script
   end
 
   def playlist_by_name(name)
-    load_all_playlists.find { |p| p.name == name }
+    playlists.find { |p| p.name == name }
   end
 
   def id_of_uri(uri)
@@ -285,6 +286,10 @@ class Script
       return tracks if new_tracks.empty?
     end
     tracks
+  end
+
+  def playlists
+    @playlists ||= load_all_playlists
   end
 
   def load_all_playlists
