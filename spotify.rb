@@ -206,7 +206,7 @@ class Script
     end
 
     if input.start_with?('spotify:playlist:')
-      playlist_by_uri(id)
+      playlist_by_uri(input)
     else
       playlist_by_name(input)
     end
@@ -675,6 +675,13 @@ if __FILE__ == $PROGRAM_NAME
       script = Script.new(verbose: true)
       playlist1 = script.get_playlist(ARGV[1])
       playlist2 = script.recently_played_playlist
+      script.playlist_without_playlist(playlist1, playlist2)
+    when 'remove_recents'
+      script = Script.new(verbose: true)
+      playlist1 = script.get_playlist(ARGV[1])
+      playlist2 = script.recently_played_playlist
+      tracks_to_remove = script.load_all_tracks(playlist2)
+      script.remove_tracks_by_metadata(tracks_to_remove, playlist1, ARGV[1] == 'current')
       script.playlist_without_playlist(playlist1, playlist2)
     when 'playlist_without_playlist'
       script = Script.new(verbose: true)
