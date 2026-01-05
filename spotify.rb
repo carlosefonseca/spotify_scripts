@@ -497,7 +497,8 @@ class Script
   end
 
   def playlist_lyrics(id)
-    p = RSpotify::Playlist.find_by_id(id)
+    playlist_id = id_of_uri(id)
+    p = RSpotify::Playlist.find_by_id(playlist_id)
     tracks = p.tracks
     p(tracks)
     lyrics_for_tracks(tracks)
@@ -553,15 +554,21 @@ class Script
   end
 
   def scrape_lyrics(url)
-    require 'hpricot'
+    require 'nokogiri'
 
     page = RestClient.get(url).body
 
-    html = Hpricot(page)
+    html = Nokogiri::HTML(page)
 
-    lyrics1 = html.at("//div[@data-lyrics-container='true']")
-    lyrics1.search('br').each { |x| x.swap("\n") }
-    lyrics1.innerText
+    lyrics_container = html.at_xpath("//div[@data-lyrics-container='true']")
+
+    return nil unless lyrics_container
+
+    lyrics_container.xpath('.//br').each do |br_tag|
+      br_tag.replace("\n")
+    end
+
+    lyrics_container.text
   end
 
   def check_playlist_name_changes(playlists)
@@ -637,6 +644,97 @@ class Script
     tracks2 = tracks2.shuffle if shuffle
     save_tracks_to_playlist_named("#{p1.name} (not saved)", tracks2)
   end
+
+  def split_run_mad_master
+    # Load the Run Mad Master playlist
+    master_playlist = playlist_by_uri('spotify:playlist:0ij4iUFJ1OJTA4fvYnnSEL')
+    puts "Loading tracks from #{master_playlist.name}..."
+    all_tracks = load_all_tracks(master_playlist, market: nil)
+    puts "Total tracks: #{all_tracks.length}"
+
+    # Split tracks into chunks of 100
+    track_chunks = all_tracks.each_slice(100).to_a
+    puts "Creating #{track_chunks.length} playlists..."
+
+    # Create or replace _runmad_1, _runmad_2, etc.
+    track_chunks.each_with_index do |chunk, index|
+      playlist_name = "_runmad_#{index + 1}"
+      puts "Processing #{playlist_name} with #{chunk.length} tracks..."
+
+      # Find existing playlist or create new one
+      existing_playlist = playlist_by_name(playlist_name)
+      if existing_playlist
+        puts "Replacing existing playlist: #{playlist_name}"
+        replace_all_tracks_on_playlist(chunk, existing_playlist)
+      else
+        puts "Creating new playlist: #{playlist_name}"
+        new_playlist = user.create_playlist!(playlist_name)
+        add_tracks_to_playlist(chunk, new_playlist)
+      end
+    end
+
+    # Create shuffled 100-song playlist from the master
+    shuffled_tracks = all_tracks.sample(100)
+    shuffled_playlist_name = '_runmad_shuffle'
+    puts "Creating shuffled playlist: #{shuffled_playlist_name} with 100 tracks..."
+
+    existing_shuffle = playlist_by_name(shuffled_playlist_name)
+    if existing_shuffle
+      puts 'Replacing existing shuffled playlist'
+      replace_all_tracks_on_playlist(shuffled_tracks, existing_shuffle)
+    else
+      puts 'Creating new shuffled playlist'
+      shuffle_playlist = user.create_playlist!(shuffled_playlist_name)
+      add_tracks_to_playlist(shuffled_tracks, shuffle_playlist)
+    end
+
+    puts pastel.green.bold("Split complete! Created #{track_chunks.length} split playlists and 1 shuffled playlist.")
+  end
+
+  def recreate_together_mega_mix
+    puts 'Creating Together Mega Mix...'
+
+    # 0. Load recently played tracks to exclude
+    puts 'Loading recently played tracks...'
+    recently_played_tracks = all_recently_played
+    puts "  Loaded #{recently_played_tracks.length} recently played tracks to exclude"
+
+    # 1. Load tracks from Inês-Starred playlist, remove recently played, randomize and take first 100
+    puts 'Loading tracks from Inês-Starred playlist...'
+    ines_starred = playlist_by_uri('spotify:playlist:32uFzY3WoyrnyMDFExwpyT')
+    ines_tracks = load_all_tracks(ines_starred, market: nil)
+    ines_tracks = subtract_tracks_by_metadata(ines_tracks, recently_played_tracks)
+    ines_sample = ines_tracks.sample(100)
+    puts "  Loaded #{ines_sample.length} tracks from Inês-Starred (after removing recents)"
+
+    # 2. Load my saved tracks, remove recently played, randomize and take first 100
+    puts 'Loading saved tracks...'
+    saved_tracks = load_saved_tracks(market: nil)
+    saved_tracks = subtract_tracks_by_metadata(saved_tracks, recently_played_tracks)
+    saved_sample = saved_tracks.sample(100)
+    puts "  Loaded #{saved_sample.length} saved tracks (after removing recents)"
+
+    # 3. Load Future Setlists playlist, remove recently played, randomize and take first 100
+    puts 'Loading tracks from Future Setlists...'
+    future_setlists = playlist_by_name('Future Setlists')
+    future_tracks = load_all_tracks(future_setlists, market: nil)
+    future_tracks = subtract_tracks_by_metadata(future_tracks, recently_played_tracks)
+    future_sample = future_tracks.sample(100)
+    puts "  Loaded #{future_sample.length} tracks from Future Setlists (after removing recents)"
+
+    # 4. Mix all three by zipping (interleaving)
+    puts 'Mixing all tracks...'
+    mixed_tracks = ines_sample.zip(saved_sample, future_sample).flatten.compact
+    puts "  Total mixed tracks: #{mixed_tracks.length}"
+
+    # 5. Save to Together Mega Mix, replacing existing tracks
+    puts 'Saving to Together Mega Mix...'
+    together_mega_mix = playlist_by_name('Together Mega Mix')
+    raise "Playlist 'Together Mega Mix' not found!" unless together_mega_mix
+
+    replace_all_tracks_on_playlist(mixed_tracks, together_mega_mix)
+    puts pastel.green.bold("Together Mega Mix recreated with #{mixed_tracks.length} tracks!")
+  end
 end
 
 def collect_values(hashes)
@@ -671,6 +769,10 @@ if __FILE__ == $PROGRAM_NAME
       Script.new.check_playlist_name_changes(%w[0CHJozYEL8O421waNFDEvE])
     when 'shuffle_run_mad'
       Script.new.shuffle_run_mad
+    when 'split_run_mad_master'
+      Script.new(verbose: true).split_run_mad_master
+    when 'recreate_together_mega_mix'
+      Script.new(verbose: true).recreate_together_mega_mix
     when 'playlist_without_recently_played'
       script = Script.new(verbose: true)
       playlist1 = script.get_playlist(ARGV[1])
@@ -715,6 +817,8 @@ if __FILE__ == $PROGRAM_NAME
         - playlist_lyrics <playlist_id>
         - check_playlist_name_changes
         - shuffle_run_mad
+        - split_run_mad_master
+        - recreate_together_mega_mix
         - playlist_without_recently_played <playlist_uri>
         - playlist_without_playlist <playlist_uri> <playlist_uri> [shuffle]
         - playlist_without_saved <playlist_uri> [shuffle]
