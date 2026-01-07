@@ -48,6 +48,7 @@ class Script
   def initialize(verbose: false)
     @verbose = verbose
     RSpotify.authenticate(env['client_id'], env['client_secret'])
+    user
   end
 
   def user
@@ -183,9 +184,11 @@ class Script
   end
 
   def playlist_by_uri(uri)
-    puts "playlist_by_uri: #{uri}" if @verbose
+    print "playlist_by_uri: #{uri}" if @verbose
     id = id_of_uri(uri)
-    RSpotify::Playlist.find_by_id(id)
+    p = RSpotify::Playlist.find_by_id(id)
+    puts " -> #{p.name}"
+    p
   end
 
   def get_playlist(input)
@@ -202,7 +205,7 @@ class Script
     end
 
     if input.start_with?('https://open.spotify.com/playlist/')
-      input = 'spotify:playlist:' + uri.split('/').last.split('?').first
+      input = 'spotify:playlist:' + input.split('/').last.split('?').first
     end
 
     if input.start_with?('spotify:playlist:')
@@ -420,7 +423,7 @@ class Script
       user.player.shuffle(device_id: zipp.id, state: shuffle) unless shuffle.nil?
       user.player.play_context(device_id = zipp.id, uri) # rubocop:todo Lint/UselessAssignment
     end
-    player.volume 10 # causes the warning
+    player.volume 12 # causes the warning
   end
 
   def resume_zipp # rubocop:todo Metrics/AbcSize
@@ -444,7 +447,7 @@ class Script
         puts 'Sleeping...'
         sleep(0.1)
       end
-      player.volume 10 # causes the warning
+      player.volume 12 # causes the warning
     rescue StandardError => e
       puts "Failed to resume zipp. #{e}\nParams: #{params}"
       exit 1
@@ -784,7 +787,6 @@ if __FILE__ == $PROGRAM_NAME
       playlist2 = script.recently_played_playlist
       tracks_to_remove = script.load_all_tracks(playlist2)
       script.remove_tracks_by_metadata(tracks_to_remove, playlist1, ARGV[1] == 'current')
-      script.playlist_without_playlist(playlist1, playlist2)
     when 'playlist_without_playlist'
       script = Script.new(verbose: true)
       playlist1 = script.get_playlist(ARGV[1])
@@ -796,6 +798,10 @@ if __FILE__ == $PROGRAM_NAME
       playlist1 = script.get_playlist(ARGV[1])
       shuffle = ARGV[2].include?('shuffle')
       script.playlist_without_saved(playlist1, shuffle: shuffle)
+    when 'shuffle'
+      script = Script.new(verbose: true)
+      playlist1 = script.get_playlist(ARGV[1])
+      script.shuffle_playlist(playlist: playlist1)
     when 'import'
       prompt = TTY::Prompt.new
       artist = prompt.ask("What's the artist name?")
